@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.agents/
+.codex
+.playwright-cli/
+.expo/
+.expo-shared/
+*.log
+logs/
+data/*.db
+**/*.db
+*:Zone.Identifier
+output/
+apps/mobile/.git/
+apps/mobile/.git.local-backup/
+coverage/
+.DS_Store
