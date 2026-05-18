@@ -7,6 +7,10 @@ import { describe, expect, it } from 'vitest'
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const appSource = readFileSync(path.resolve(currentDir, 'App.tsx'), 'utf8')
 const boundarySource = readFileSync(path.resolve(currentDir, 'error-boundary.tsx'), 'utf8')
+const contextBarSource = readFileSync(
+  path.resolve(currentDir, 'components/layout/WorkspaceContextBar.tsx'),
+  'utf8',
+)
 
 describe('frontend display copy', () => {
   it('removes internal development wording from user-facing screens', () => {
@@ -37,5 +41,14 @@ describe('frontend display copy', () => {
     expect(appSource).toContain('使用指引')
     expect(appSource).toContain('课程列表')
     expect(appSource).toContain('当前进度')
+  })
+
+  it('contains redesigned workflow copy', () => {
+    const workflowSource = `${appSource}\n${contextBarSource}`
+
+    expect(workflowSource).toContain('当前工作上下文')
+    expect(workflowSource).toContain('课程 / 作业 / 提交')
+    expect(workflowSource).toContain('我的作业')
+    expect(workflowSource).toContain('待回复反馈')
   })
 })

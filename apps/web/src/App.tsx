@@ -2,79 +2,23 @@ import { startTransition, useDeferredValue, useEffect, useState, type ReactNode 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import './App.css'
-import { ApiError, api, type SessionPayload, type UserRole } from './api'
+import { ApiError, api, type SessionPayload } from './api'
+import { WorkspaceContextBar } from './components/layout/WorkspaceContextBar'
+import { StatePanel } from './components/ui/StatePanel'
 import { createDefaultAssignmentDates } from './demo-defaults'
+import type {
+  AssignmentItem,
+  CourseFeedbackItem,
+  CourseItem,
+  FeedbackItem,
+  SubmissionItem,
+  UserRole,
+} from './domain'
 import { readInitialRuntimeState } from './runtime-state'
+import { formatDateTimeForDisplay, fromDateTimeLocalValue, toDateTimeLocalValue } from './utils/date'
+import { friendlyErrorMessage } from './utils/errors'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:4100/api/v1'
-
-type CourseItem = {
-  id: string
-  courseCode: string
-  courseName: string
-  description: string
-  teacherId: string
-  semester: string
-  location: string
-  scheduleText: string
-  capacity: number
-  startDate?: string
-  endDate?: string
-  status: string
-}
-
-type AssignmentItem = {
-  id: string
-  courseId: string
-  teacherId: string
-  title: string
-  description: string
-  requirement: string
-  startAt: string
-  dueAt: string
-  status: string
-  hasSubmitted?: boolean
-  submissionId?: string | null
-}
-
-type SubmissionItem = {
-  id: string
-  assignmentId: string
-  studentId: string
-  content: string
-  status: string
-  score?: number | null
-  teacherFeedback?: string | null
-  submittedAt?: string | null
-  gradedAt?: string | null
-}
-
-type FeedbackItem = {
-  id: string
-  assignmentId: string
-  submissionId: string
-  studentId: string
-  kind: 'question' | 'feedback'
-  content: string
-  status: string
-  responses: Array<{
-    id: string
-    feedbackId: string
-    teacherId: string
-    content: string
-  }>
-}
-
-type CourseFeedbackItem = {
-  id: string
-  courseId: string
-  courseName?: string
-  studentId: string
-  teacherId: string
-  dimension: 'content' | 'method' | 'teaching' | 'gain' | 'other'
-  content: string
-  status: string
-}
 
 type SummaryRecord = Record<string, number>
 type WorkspaceView =
@@ -122,7 +66,7 @@ const roleNavigation: Record<UserRole, Array<{ view: WorkspaceView; label: strin
   student: [
     { view: 'dashboard', label: '工作台', hint: '学习总览' },
     { view: 'courses', label: '课程', hint: '课程检索与加入' },
-    { view: 'assignments', label: '作业提交', hint: '查看作业与提交答案' },
+    { view: 'assignments', label: '我的作业', hint: '查看作业与提交答案' },
     { view: 'courseFeedbacks', label: '课程反馈', hint: '课程维度反馈' },
     { view: 'interaction', label: '互动交流', hint: '问题与教师回复' },
     { view: 'account', label: '账号维护', hint: '资料与安全' },
@@ -132,7 +76,7 @@ const roleNavigation: Record<UserRole, Array<{ view: WorkspaceView; label: strin
     { view: 'courses', label: '课程', hint: '授课课程列表' },
     { view: 'assignments', label: '作业管理', hint: '发布与维护作业' },
     { view: 'grading', label: '提交批改', hint: '学生提交与评分' },
-    { view: 'interaction', label: '互动交流', hint: '答疑与回复' },
+    { view: 'interaction', label: '待回复反馈', hint: '答疑与回复' },
     { view: 'courseFeedbacks', label: '课程反馈', hint: '学生课程反馈' },
     { view: 'account', label: '账号维护', hint: '资料与安全' },
   ],
@@ -159,45 +103,13 @@ const summaryLabels: Record<string, string> = {
   pendingGrades: '待批改提交',
 }
 
-const friendlyErrorMessages: Record<string, string> = {
-  invalid_credentials: '手机号或密码不正确，请重新输入。',
-  verification_code_not_found: '请先获取验证码。',
-  verification_code_used: '验证码已失效，请重新获取。',
-  verification_code_expired: '验证码已过期，请重新获取。',
-  verification_code_invalid: '验证码不正确，请重新输入。',
-  phone_already_registered: '该手机号已注册，可直接登录。',
-  student_id_already_registered: '该学号已存在，请核对后重试。',
-  validation_failed: '请检查填写内容后再提交。',
-  already_enrolled: '你已加入该课程。',
-  forbidden: '当前账号暂无此操作权限。',
-  not_found: '未找到对应内容。',
-  internal_server_error: '系统暂时繁忙，请稍后再试。',
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) {
-    return '未设置'
-  }
-
-  return new Date(value).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 function extractErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
-    const normalizedMessage = error.message.toLowerCase()
-    return friendlyErrorMessages[normalizedMessage] ?? '当前操作暂时无法完成，请稍后再试。'
+    return friendlyErrorMessage(error.message)
   }
 
   if (error instanceof Error) {
-    if (error.message.toLowerCase().includes('failed to fetch')) {
-      return '当前无法连接系统服务，请稍后重试。'
-    }
-    return error.message
+    return friendlyErrorMessage(error.message)
   }
 
   return '请求失败'
@@ -223,16 +135,6 @@ function SectionCard(props: { title: string; subtitle: string; children: ReactNo
       </div>
       {props.children}
     </section>
-  )
-}
-
-function StatePanel(props: { title: string; detail: string }) {
-  return (
-    <div className="state-panel" role="status" aria-live="polite">
-      <span className="state-eyebrow">状态提示</span>
-      <strong>{props.title}</strong>
-      <p>{props.detail}</p>
-    </div>
   )
 }
 
@@ -1394,6 +1296,26 @@ function App() {
         </header>
 
         <div className="notice-bar">{notice}</div>
+        <WorkspaceContextBar
+          context={{ course: selectedCourse, assignment: selectedAssignment, submission: selectedSubmission }}
+          courses={visibleCourses}
+          assignments={assignments}
+          submissions={submissions}
+          onCourseChange={(courseId) => {
+            startTransition(() => {
+              setSelectedCourseId(courseId || null)
+              setSelectedAssignmentId(null)
+              setSelectedSubmissionId(null)
+            })
+          }}
+          onAssignmentChange={(assignmentId) => {
+            startTransition(() => {
+              setSelectedAssignmentId(assignmentId || null)
+              setSelectedSubmissionId(null)
+            })
+          }}
+          onSubmissionChange={(submissionId) => setSelectedSubmissionId(submissionId || null)}
+        />
 
         <div className="dashboard-layout">
             <div className={visibleView === 'dashboard' ? 'hero-banner' : 'hero-banner view-hidden'}>
@@ -2000,18 +1922,26 @@ function App() {
                         <label>
                           开始时间
                           <input
-                            value={assignmentDraft.startAt}
+                            type="datetime-local"
+                            value={toDateTimeLocalValue(assignmentDraft.startAt)}
                             onChange={(event) =>
-                              setAssignmentDraft((current) => ({ ...current, startAt: event.target.value }))
+                              setAssignmentDraft((current) => ({
+                                ...current,
+                                startAt: fromDateTimeLocalValue(event.target.value),
+                              }))
                             }
                           />
                         </label>
                         <label>
                           截止时间
                           <input
-                            value={assignmentDraft.dueAt}
+                            type="datetime-local"
+                            value={toDateTimeLocalValue(assignmentDraft.dueAt)}
                             onChange={(event) =>
-                              setAssignmentDraft((current) => ({ ...current, dueAt: event.target.value }))
+                              setAssignmentDraft((current) => ({
+                                ...current,
+                                dueAt: fromDateTimeLocalValue(event.target.value),
+                              }))
                             }
                           />
                         </label>
@@ -2215,7 +2145,7 @@ function App() {
                           <span>{assignment.status}</span>
                         </div>
                         <p>{assignment.description}</p>
-                        <small>截止：{formatDateTime(assignment.dueAt)}</small>
+                        <small>截止：{formatDateTimeForDisplay(assignment.dueAt)}</small>
                         {currentRole === 'student' ? (
                           <small>
                             提交状态：{assignment.hasSubmitted ? '已提交' : '未提交'}
@@ -2314,7 +2244,7 @@ function App() {
                               <span>{submission.status}</span>
                             </div>
                             <p>{submission.content}</p>
-                            <small>提交：{formatDateTime(submission.submittedAt)}</small>
+                            <small>提交：{formatDateTimeForDisplay(submission.submittedAt)}</small>
                           </button>
                         ))
                       ) : (
