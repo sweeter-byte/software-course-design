@@ -42,12 +42,19 @@
 - `apps/server/tests/courses.integration.test.ts`：课程创建、详情、筛选、修改、删除。
 - `apps/server/tests/assignments.integration.test.ts`：作业发布、查询、学生提交状态、截止/已提交后的修改保护、取消和提交清理。
 - `apps/server/tests/submissions.integration.test.ts`：提交、查询、修改、批改和已批改保护。
-- `apps/server/tests/feedback.integration.test.ts`：反馈发布、查看、总览、修改、删除和回答新增、修改、删除。
-- `apps/server/tests/course-feedbacks.integration.test.ts`：课程反馈新增、修改、查看、删除，以及教师/教务员查看。
+- `apps/server/tests/feedback.integration.test.ts`：反馈发布、查看、总览（含分页 limit/offset、大小写归一化、跨角色权限）、修改、删除和回答新增、修改、删除。
+- `apps/server/tests/course-feedbacks.integration.test.ts`：课程反馈新增、修改、查看、删除，以及教师/教务员查看，且返回 `studentName`、`studentNo`。
 - `apps/server/tests/dashboard.integration.test.ts`：教务员首页摘要含课程反馈统计。
 - `apps/web/src/api.test.ts`：Web/Mobile 同源 API 客户端的无请求体写操作不会触发空 JSON body 错误，并覆盖反馈线程总览查询参数。
+- `apps/web/src/components/layout/WorkspaceContextBar.test.tsx`：当前工作上下文条的学生注入展示、无提交时下拉禁用、课程/提交切换回调。
+- `apps/web/src/features/assignments/StudentAssignmentWorkspace.test.tsx`：未提交/已提交/已批改三态按钮文案与可点击性、批改前后反馈表单切换。
+- `apps/web/src/features/teacher/TeacherTaskWorkspace.test.tsx`：待批改卡片选择、查看对应提交跳转回调、回复学生提交、教师任务详情面板加载/缺失态、课程反馈展示。
+- `apps/web/src/features/auth/LoginShell.test.tsx`：登录/注册/找回密码三种 authMode 渲染与跳转。
+- `apps/web/src/features/account/AccountSection.test.tsx`：资料/密码/手机号子表单与回调串联。
+- `apps/web/src/hooks/useWorkspaceContext.test.ts`：工作上下文解析在学生/教师两种角色下的兜底行为。
+- `apps/web/src/utils/errors.test.ts`：业务错误码到中文文案的映射，覆盖 graded/已提交/截止/未加入课程等。
 
-最新结果：后端 10 个测试文件、43 个测试用例通过；Web 10 个测试文件、19 个测试用例通过；根目录测试、全工作区类型检查、Server/Web 构建和全工作区 lint 均通过。
+最新结果：后端 10 个测试文件、44 个测试用例通过；Web 13 个测试文件、49 个测试用例通过；根目录测试、全工作区类型检查、Server/Web 构建和全工作区 lint 均通过。
 
 ## Web 端工作流验收说明
 

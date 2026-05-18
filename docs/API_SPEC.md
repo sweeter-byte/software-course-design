@@ -185,10 +185,12 @@
 ### GET `/feedbacks/threads`
 
 - 说明：按课程、作业或状态获取问题/反馈线程总览，用于教师待回复任务台
-- 查询参数：`courseId`, `assignmentId`, `status`
+- 查询参数：`courseId`, `assignmentId`, `status`, `limit`, `offset`
 - `status` 支持 `open | resolved | deleted`，大小写不敏感
+- `limit` 默认 100，最小 1，最大 200；非法值会回退到默认值
+- `offset` 默认 0，最小 0；非法值会回退到默认值
 - 权限：学生仅查看自己的线程；教师仅查看自己授课课程线程；教务员可查看全部线程
-- 返回字段包含：`courseId`, `courseCode`, `courseName`, `assignmentId`, `assignmentTitle`, `submissionId`, `submissionStatus`, `studentName`, `studentNo`, `responses`
+- 返回字段包含：`items[]`（`courseId`, `courseCode`, `courseName`, `assignmentId`, `assignmentTitle`, `submissionId`, `submissionStatus`, `studentName`, `studentNo`, `responses`）以及 `pagination: { limit, offset, count }`
 
 ### PATCH `/feedbacks/:feedbackId`
 
