@@ -15,6 +15,10 @@ const studentAssignmentSource = readFileSync(
   path.resolve(currentDir, 'features/assignments/StudentAssignmentWorkspace.tsx'),
   'utf8',
 )
+const teacherTaskSource = readFileSync(
+  path.resolve(currentDir, 'features/teacher/TeacherTaskWorkspace.tsx'),
+  'utf8',
+)
 
 describe('frontend display copy', () => {
   it('removes internal development wording from user-facing screens', () => {
@@ -48,7 +52,7 @@ describe('frontend display copy', () => {
   })
 
   it('contains redesigned workflow copy', () => {
-    const workflowSource = `${appSource}\n${contextBarSource}\n${studentAssignmentSource}`
+    const workflowSource = `${appSource}\n${contextBarSource}\n${studentAssignmentSource}\n${teacherTaskSource}`
 
     expect(workflowSource).toContain('当前工作上下文')
     expect(workflowSource).toContain('课程 / 作业 / 提交')
@@ -56,5 +60,7 @@ describe('frontend display copy', () => {
     expect(workflowSource).toContain('待回复反馈')
     expect(workflowSource).toContain('提交与成绩')
     expect(workflowSource).toContain('批改后可发起作业问题或反馈')
+    expect(workflowSource).toContain('教师任务工作台')
+    expect(workflowSource).toContain('回复学生')
   })
 })

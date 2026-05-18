@@ -895,6 +895,86 @@ button {
   font-size: 1.3rem;
 }
 
+.teacher-task-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.task-intro,
+.task-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.task-intro {
+  padding: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.task-intro h4,
+.task-panel h4 {
+  margin: 0;
+  color: var(--text);
+}
+
+.task-intro p,
+.task-panel-head p {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.task-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.task-summary-grid div {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.task-summary-grid span,
+.task-panel-head span {
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.task-summary-grid strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--nuaa-blue);
+  font-size: 1.5rem;
+}
+
+.task-panel {
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.task-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.task-panel-head > span {
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  color: var(--nuaa-blue-dark);
+  background: #edf6ff;
+}
+
 .state-panel {
   padding: 16px;
   display: grid;

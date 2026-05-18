@@ -24,6 +24,8 @@ type CourseFeedbackRow = {
   updated_at: string
   course_name: string
   teacher_id: string
+  student_name: string | null
+  student_no: string | null
 }
 
 function toCourseFeedback(row: CourseFeedbackRow) {
@@ -32,6 +34,8 @@ function toCourseFeedback(row: CourseFeedbackRow) {
     courseId: row.course_id,
     courseName: row.course_name,
     studentId: row.student_id,
+    studentName: row.student_name,
+    studentNo: row.student_no,
     teacherId: row.teacher_id,
     dimension: row.dimension,
     content: row.content,
@@ -55,9 +59,12 @@ function getCourseFeedbackById(database: DatabaseSync, feedbackId: string) {
           course_feedbacks.created_at,
           course_feedbacks.updated_at,
           courses.course_name,
-          courses.teacher_id
+          courses.teacher_id,
+          students.real_name AS student_name,
+          students.student_no
         FROM course_feedbacks
         INNER JOIN courses ON courses.id = course_feedbacks.course_id
+        INNER JOIN users AS students ON students.id = course_feedbacks.student_id
         WHERE course_feedbacks.id = ?
         LIMIT 1
       `,
@@ -162,9 +169,12 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
             course_feedbacks.created_at,
             course_feedbacks.updated_at,
             courses.course_name,
-            courses.teacher_id
+            courses.teacher_id,
+            students.real_name AS student_name,
+            students.student_no
           FROM course_feedbacks
           INNER JOIN courses ON courses.id = course_feedbacks.course_id
+          INNER JOIN users AS students ON students.id = course_feedbacks.student_id
           WHERE ${filters.join(' AND ')}
           ORDER BY course_feedbacks.created_at DESC
         `,

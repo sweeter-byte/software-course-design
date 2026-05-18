@@ -15,6 +15,7 @@ import type {
   UserRole,
 } from './domain'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
+import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
 import { readInitialRuntimeState } from './runtime-state'
 import { formatDateTimeForDisplay, fromDateTimeLocalValue, toDateTimeLocalValue } from './utils/date'
 import { friendlyErrorMessage } from './utils/errors'
@@ -57,7 +58,7 @@ const viewLabels: Record<WorkspaceView, string> = {
   courses: '课程',
   courseAdmin: '课程维护',
   assignments: '作业管理',
-  grading: '提交批改',
+  grading: '教师任务',
   courseFeedbacks: '课程反馈',
   interaction: '互动交流',
   account: '账号维护',
@@ -76,7 +77,7 @@ const roleNavigation: Record<UserRole, Array<{ view: WorkspaceView; label: strin
     { view: 'dashboard', label: '工作台', hint: '教学处理总览' },
     { view: 'courses', label: '课程', hint: '授课课程列表' },
     { view: 'assignments', label: '作业管理', hint: '发布与维护作业' },
-    { view: 'grading', label: '提交批改', hint: '学生提交与评分' },
+    { view: 'grading', label: '教师任务', hint: '批改与答疑' },
     { view: 'interaction', label: '待回复反馈', hint: '答疑与回复' },
     { view: 'courseFeedbacks', label: '课程反馈', hint: '学生课程反馈' },
     { view: 'account', label: '账号维护', hint: '资料与安全' },
@@ -319,6 +320,31 @@ function App() {
       }
 
       const payload = await api.listFeedbacks(apiBaseUrl, session.accessToken, selectedSubmissionId)
+      return {
+        items: payload.items as FeedbackItem[],
+      }
+    },
+  })
+
+  const feedbackThreadsQuery = useQuery({
+    enabled: Boolean(session?.user.role === 'teacher'),
+    queryKey: [
+      'feedbackThreads',
+      apiBaseUrl,
+      session?.accessToken,
+      selectedCourseId,
+      selectedAssignmentId,
+    ],
+    queryFn: async () => {
+      if (!session) {
+        return { items: [] as FeedbackItem[] }
+      }
+
+      const payload = await api.listFeedbackThreads(apiBaseUrl, session.accessToken, {
+        courseId: selectedCourseId ?? undefined,
+        assignmentId: selectedAssignmentId ?? undefined,
+        status: 'open',
+      })
       return {
         items: payload.items as FeedbackItem[],
       }
@@ -742,6 +768,7 @@ function App() {
     onSuccess: () => {
       setNotice('留言已提交。')
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
@@ -755,6 +782,7 @@ function App() {
     onSuccess: () => {
       setNotice('回复已提交。')
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
@@ -773,6 +801,7 @@ function App() {
     onSuccess: () => {
       setNotice('问题/反馈已修改。')
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
@@ -785,6 +814,7 @@ function App() {
     onSuccess: () => {
       setNotice('问题/反馈已删除。')
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
@@ -798,6 +828,7 @@ function App() {
     onSuccess: () => {
       setNotice('回复已修改。')
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
@@ -810,6 +841,7 @@ function App() {
     onSuccess: () => {
       setNotice('回复已删除。')
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
@@ -855,6 +887,7 @@ function App() {
   const submissions = (submissionsQuery.data?.items ?? []) as SubmissionItem[]
   const feedbacks = (feedbacksQuery.data?.items ?? []) as FeedbackItem[]
   const courseFeedbacks = (courseFeedbacksQuery.data?.items ?? []) as CourseFeedbackItem[]
+  const feedbackThreads = (feedbackThreadsQuery.data?.items ?? []) as FeedbackItem[]
 
   const currentRole = session?.user.role
   const navItems = currentRole ? roleNavigation[currentRole] : []
@@ -2155,15 +2188,15 @@ function App() {
               </SectionCard>
 
               <SectionCard
-                title={currentRole === 'teacher' ? '提交与批改' : '我的作业'}
+                title={currentRole === 'teacher' ? '教师任务工作台' : '我的作业'}
                 subtitle={
                   currentRole === 'teacher'
-                    ? '教师查看提交并给出评语与分数。'
+                    ? '集中处理待批改提交、待回复反馈与课程反馈。'
                     : '学生在一个页面内完成作业查看、提交与反馈。'
                 }
                 className={
                   currentRole === 'teacher'
-                    ? visibleView === 'grading'
+                    ? visibleView === 'grading' || visibleView === 'interaction'
                       ? undefined
                       : 'view-hidden'
                     : visibleView === 'assignments'
@@ -2189,74 +2222,44 @@ function App() {
                     onPostFeedback={() => createFeedbackMutation.mutate()}
                   />
                 ) : (
-                  <>
-                    <div className="entity-list compact">
-                      {submissionsQuery.isLoading ? (
-                        <StatePanel title="提交正在加载" detail="正在获取学生提交记录。" />
-                      ) : submissions.length > 0 ? (
-                        submissions.map((submission) => (
-                          <button
-                            key={submission.id}
-                            className={
-                              selectedSubmissionId === submission.id ? 'entity-card active' : 'entity-card'
-                            }
-                            type="button"
-                            onClick={() => setSelectedSubmissionId(submission.id)}
-                          >
-                            <div>
-                              <strong>{submission.studentId}</strong>
-                              <span>{submission.status}</span>
-                            </div>
-                            <p>{submission.content}</p>
-                            <small>提交：{formatDateTimeForDisplay(submission.submittedAt)}</small>
-                          </button>
-                        ))
-                      ) : (
-                        <StatePanel
-                          title="暂无学生提交"
-                          detail={selectedAssignment ? '当前作业尚未收到提交。' : '先选择作业，再查看对应提交。'}
-                        />
-                      )}
-                    </div>
-                    <form
-                      className="stack-form"
-                      onSubmit={(event) => {
-                        event.preventDefault()
-                        gradeSubmissionMutation.mutate()
-                      }}
-                    >
-                      <div className="form-grid">
-                        <label>
-                          分数
-                          <input
-                            value={gradeDraft.score}
-                            onChange={(event) =>
-                              setGradeDraft((current) => ({ ...current, score: event.target.value }))
-                            }
-                          />
-                        </label>
-                        <label>
-                          评语
-                          <textarea
-                            value={gradeDraft.teacherFeedback}
-                            onChange={(event) =>
-                              setGradeDraft((current) => ({
-                                ...current,
-                                teacherFeedback: event.target.value,
-                              }))
-                            }
-                          />
-                        </label>
-                      </div>
-                      <button
-                        className="primary-button"
-                        type="submit"
-                        disabled={!selectedSubmissionId || gradeSubmissionMutation.isPending}
-                      >
-                        {gradeSubmissionMutation.isPending ? '写回中...' : '提交批改结果'}
-                      </button>
-                    </form>
-                  </>
+                  <TeacherTaskWorkspace
+                    course={selectedCourse}
+                    assignment={selectedAssignment}
+                    submissions={submissions}
+                    feedbackThreads={feedbackThreads}
+                    courseFeedbacks={courseFeedbacks}
+                    selectedSubmissionId={selectedSubmissionId}
+                    gradeScore={gradeDraft.score}
+                    gradeFeedback={gradeDraft.teacherFeedback}
+                    responseDraft={responseDraft}
+                    isLoadingSubmissions={submissionsQuery.isLoading}
+                    isLoadingFeedbackThreads={feedbackThreadsQuery.isLoading}
+                    isLoadingCourseFeedbacks={courseFeedbacksQuery.isLoading}
+                    isGrading={gradeSubmissionMutation.isPending}
+                    isResponding={createResponseMutation.isPending}
+                    onSelectSubmission={(submission) => {
+                      setSelectedSubmissionId(submission.id)
+                      setSubmissionContent(submission.content)
+                      setGradeDraft({
+                        score: submission.score == null ? '' : String(submission.score),
+                        teacherFeedback: submission.teacherFeedback ?? '',
+                      })
+                    }}
+                    onGradeScoreChange={(score) => setGradeDraft((current) => ({ ...current, score }))}
+                    onGradeFeedbackChange={(teacherFeedback) =>
+                      setGradeDraft((current) => ({ ...current, teacherFeedback }))
+                    }
+                    onSubmitGrade={() => gradeSubmissionMutation.mutate()}
+                    onResponseDraftChange={setResponseDraft}
+                    onCreateResponse={(feedbackId) => createResponseMutation.mutate(feedbackId)}
+                    onSelectFeedbackThread={(feedback) => {
+                      startTransition(() => {
+                        setSelectedCourseId(feedback.courseId ?? selectedCourseId)
+                        setSelectedAssignmentId(feedback.assignmentId)
+                        setSelectedSubmissionId(feedback.submissionId)
+                      })
+                    }}
+                  />
                 )}
               </SectionCard>
             </div>
@@ -2265,7 +2268,7 @@ function App() {
               <SectionCard
                 title="互动交流"
                 subtitle="围绕课程学习与作业反馈持续沟通。"
-                className={visibleView === 'interaction' ? undefined : 'view-hidden'}
+                className={currentRole === 'teacher' || visibleView !== 'interaction' ? 'view-hidden' : undefined}
               >
                 {currentRole === 'student' ? (
                   <form

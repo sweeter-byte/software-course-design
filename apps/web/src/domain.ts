@@ -57,6 +57,7 @@ export type FeedbackResponseItem = {
 
 export type FeedbackItem = {
   id: string
+  courseId?: string | null
   assignmentId: string
   submissionId: string
   studentId: string

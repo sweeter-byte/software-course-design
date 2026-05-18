@@ -227,6 +227,8 @@ describe('course feedbacks', () => {
         id: feedbackId,
         courseId,
         dimension: 'method',
+        studentName: '课程反馈学生',
+        studentNo: '162351110',
       }),
     ])
 
@@ -243,6 +245,8 @@ describe('course feedbacks', () => {
       expect.objectContaining({
         id: feedbackId,
         courseId,
+        studentName: '课程反馈学生',
+        studentNo: '162351110',
       }),
     ])
   })
