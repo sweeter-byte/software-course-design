@@ -15,3 +15,4 @@ apps/mobile/.git/
 apps/mobile/.git.local-backup/
 coverage/
 .DS_Store
+.superpowers/
