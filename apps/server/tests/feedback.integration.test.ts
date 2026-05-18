@@ -169,8 +169,11 @@ async function createFeedbackThread() {
 
   return {
     app,
+    officerToken,
     studentToken,
     teacherToken,
+    courseId,
+    assignmentId,
     submissionId,
     feedbackId,
     responseId,
@@ -532,6 +535,109 @@ describe('feedback threads', () => {
         requestId: expect.any(String),
       },
     })
+  })
+
+  it('lists feedback thread overview for the course teacher with course, assignment, student, and response context', async () => {
+    const { app, teacherToken, courseId, assignmentId, feedbackId, submissionId } =
+      await createFeedbackThread()
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}&assignmentId=${assignmentId}&status=open`,
+      headers: {
+        authorization: `Bearer ${teacherToken}`,
+      },
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toMatchObject({
+      success: true,
+      message: 'ok',
+      data: {
+        items: [
+          expect.objectContaining({
+            id: feedbackId,
+            courseId,
+            courseName: '反馈修改课程',
+            courseCode: expect.stringMatching(/^SE-/),
+            assignmentId,
+            assignmentTitle: '反馈修改作业',
+            submissionId,
+            submissionStatus: 'graded',
+            studentId: expect.any(String),
+            studentName: '反馈学生',
+            studentNo: '162350130',
+            kind: 'question',
+            content: '原始问题内容。',
+            status: 'open',
+            responses: [
+              expect.objectContaining({
+                teacherId: 'teacher-demo-001',
+                teacherName: '陈海燕',
+                content: '原始回答内容。',
+              }),
+            ],
+          }),
+        ],
+      },
+      meta: {
+        requestId: expect.any(String),
+      },
+    })
+  })
+
+  it('limits feedback thread overview to the current actor scope', async () => {
+    const { app, teacherToken, studentToken, officerToken, courseId, feedbackId } =
+      await createFeedbackThread()
+    const otherTeacherToken = app.jwt.sign({
+      sub: 'teacher-not-owner',
+      role: 'teacher',
+      phone: '13900999000',
+    })
+
+    const teacherResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}`,
+      headers: {
+        authorization: `Bearer ${teacherToken}`,
+      },
+    })
+    const otherTeacherResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}`,
+      headers: {
+        authorization: `Bearer ${otherTeacherToken}`,
+      },
+    })
+    const studentResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/feedbacks/threads',
+      headers: {
+        authorization: `Bearer ${studentToken}`,
+      },
+    })
+    const officerResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}`,
+      headers: {
+        authorization: `Bearer ${officerToken}`,
+      },
+    })
+
+    expect(teacherResponse.statusCode).toBe(200)
+    expect(teacherResponse.json().data.items).toEqual([
+      expect.objectContaining({ id: feedbackId }),
+    ])
+    expect(otherTeacherResponse.statusCode).toBe(200)
+    expect(otherTeacherResponse.json().data.items).toEqual([])
+    expect(studentResponse.statusCode).toBe(200)
+    expect(studentResponse.json().data.items).toEqual([
+      expect.objectContaining({ id: feedbackId }),
+    ])
+    expect(officerResponse.statusCode).toBe(200)
+    expect(officerResponse.json().data.items).toEqual([
+      expect.objectContaining({ id: feedbackId }),
+    ])
   })
 
   it('allows a student to update their own feedback', async () => {

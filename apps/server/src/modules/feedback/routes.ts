@@ -25,6 +25,29 @@ type FeedbackRow = {
   updated_at: string
 }
 
+type FeedbackThreadRow = FeedbackRow & {
+  course_id: string
+  course_code: string
+  course_name: string
+  assignment_title: string
+  submission_status: string
+  submitted_at: string | null
+  graded_at: string | null
+  student_name: string | null
+  student_no: string | null
+}
+
+type FeedbackResponseRow = {
+  id: string
+  feedback_id: string
+  teacher_id: string
+  teacher_name: string | null
+  content: string
+  created_at: string
+  updated_at: string
+  edited_at: string | null
+}
+
 function toFeedback(row: FeedbackRow) {
   return {
     id: row.id,
@@ -36,6 +59,41 @@ function toFeedback(row: FeedbackRow) {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  }
+}
+
+function toFeedbackThread(row: FeedbackThreadRow, responses: FeedbackResponseRow[]) {
+  return {
+    id: row.id,
+    courseId: row.course_id,
+    courseCode: row.course_code,
+    courseName: row.course_name,
+    assignmentId: row.assignment_id,
+    assignmentTitle: row.assignment_title,
+    submissionId: row.submission_id,
+    submissionStatus: row.submission_status,
+    submittedAt: row.submitted_at,
+    gradedAt: row.graded_at,
+    studentId: row.student_id,
+    studentName: row.student_name,
+    studentNo: row.student_no,
+    kind: row.kind,
+    content: row.content,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    responses: responses
+      .filter((response) => response.feedback_id === row.id)
+      .map((response) => ({
+        id: response.id,
+        feedbackId: response.feedback_id,
+        teacherId: response.teacher_id,
+        teacherName: response.teacher_name,
+        content: response.content,
+        createdAt: response.created_at,
+        updatedAt: response.updated_at,
+        editedAt: response.edited_at,
+      })),
   }
 }
 
@@ -53,6 +111,113 @@ function getFeedbackById(database: DatabaseSync, feedbackId: string) {
 }
 
 export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRouteContext) {
+  app.get('/feedbacks/threads', async (request) => {
+    const actor = await requireAuth(request)
+    const query = (request.query ?? {}) as {
+      courseId?: string
+      assignmentId?: string
+      status?: string
+    }
+    const filters: string[] = []
+    const values: string[] = []
+    const status = query.status?.trim()
+
+    if (status) {
+      if (!['open', 'resolved', 'deleted'].includes(status)) {
+        throw new AppError('invalid_feedback_status', 400, 'INVALID_FEEDBACK_STATUS')
+      }
+      filters.push('feedbacks.status = ?')
+      values.push(status)
+    } else {
+      filters.push("feedbacks.status <> 'deleted'")
+    }
+
+    if (query.courseId) {
+      filters.push('courses.id = ?')
+      values.push(query.courseId)
+    }
+
+    if (query.assignmentId) {
+      filters.push('assignments.id = ?')
+      values.push(query.assignmentId)
+    }
+
+    if (actor.role === 'student') {
+      filters.push('feedbacks.student_id = ?')
+      values.push(actor.sub)
+    } else if (actor.role === 'teacher') {
+      filters.push('assignments.teacher_id = ?')
+      values.push(actor.sub)
+    }
+
+    const feedbacks = context.database
+      .prepare(
+        `
+          SELECT
+            feedbacks.id,
+            feedbacks.assignment_id,
+            feedbacks.submission_id,
+            feedbacks.student_id,
+            feedbacks.kind,
+            feedbacks.content,
+            feedbacks.status,
+            feedbacks.created_at,
+            feedbacks.updated_at,
+            courses.id AS course_id,
+            courses.course_code,
+            courses.course_name,
+            assignments.title AS assignment_title,
+            submissions.status AS submission_status,
+            submissions.submitted_at,
+            submissions.graded_at,
+            students.real_name AS student_name,
+            students.student_no
+          FROM feedbacks
+          INNER JOIN assignments ON assignments.id = feedbacks.assignment_id
+          INNER JOIN courses ON courses.id = assignments.course_id
+          INNER JOIN submissions ON submissions.id = feedbacks.submission_id
+          INNER JOIN users AS students ON students.id = feedbacks.student_id
+          WHERE ${filters.join(' AND ')}
+          ORDER BY feedbacks.created_at DESC
+        `,
+      )
+      .all(...values) as FeedbackThreadRow[]
+
+    const responses =
+      feedbacks.length > 0
+        ? (context.database
+            .prepare(
+              `
+                SELECT
+                  responses.id,
+                  responses.feedback_id,
+                  responses.teacher_id,
+                  teachers.real_name AS teacher_name,
+                  responses.content,
+                  responses.created_at,
+                  responses.updated_at,
+                  responses.edited_at
+                FROM responses
+                INNER JOIN users AS teachers ON teachers.id = responses.teacher_id
+                WHERE responses.feedback_id IN (${feedbacks.map(() => '?').join(', ')})
+                ORDER BY responses.created_at ASC
+              `,
+            )
+            .all(...feedbacks.map((feedback) => feedback.id)) as FeedbackResponseRow[])
+        : []
+
+    return {
+      success: true,
+      message: 'ok',
+      data: {
+        items: feedbacks.map((feedback) => toFeedbackThread(feedback, responses)),
+      },
+      meta: {
+        requestId: request.id,
+      },
+    }
+  })
+
   app.get('/feedbacks', async (request) => {
     const actor = await requireAuth(request)
     const query = (request.query ?? {}) as { submissionId?: string }

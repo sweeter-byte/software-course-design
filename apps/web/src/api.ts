@@ -377,6 +377,28 @@ export const api = {
       { token },
     )
   },
+  listFeedbackThreads(
+    baseUrl: string,
+    token: string,
+    filters: {
+      courseId?: string
+      assignmentId?: string
+      status?: string
+    } = {},
+  ) {
+    const params = new URLSearchParams()
+
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value) params.set(key, value)
+    })
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return requestJson<{ items: Array<Record<string, unknown>> }>(
+      baseUrl,
+      `/feedbacks/threads${query}`,
+      { token },
+    )
+  },
   createFeedback(
     baseUrl: string,
     token: string,

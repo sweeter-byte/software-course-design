@@ -24,11 +24,11 @@
 | 16 | 批改答案 | 已实现 | `POST /api/v1/submissions/:submissionId/grade` | 教师提交与批改 |
 | 17 | 查询答案 | 已实现 | `GET /api/v1/submissions/:submissionId` | 学生查看提交/成绩 |
 | 18 | 发布问题或反馈 | 已实现 | `POST /api/v1/submissions/:submissionId/feedbacks` | 学生互动交流 |
-| 19 | 查看问题或反馈 | 已实现 | `GET /api/v1/feedbacks?submissionId=...` | 互动交流线程 |
+| 19 | 查看问题或反馈 | 已实现 | `GET /api/v1/feedbacks?submissionId=...`, `GET /api/v1/feedbacks/threads` | 学生作业互动、教师待回复任务 |
 | 20 | 修改问题或反馈 | 已实现 | `PATCH /api/v1/feedbacks/:feedbackId` | 学生互动交流 |
 | 21 | 删除问题或反馈 | 已实现 | `DELETE /api/v1/feedbacks/:feedbackId` | 学生互动交流 |
 | 22 | 增加回答 | 已实现 | `POST /api/v1/feedbacks/:feedbackId/responses` | 教师互动交流 |
-| 23 | 查看回答 | 已实现 | `GET /api/v1/feedbacks?submissionId=...` | 互动交流线程 |
+| 23 | 查看回答 | 已实现 | `GET /api/v1/feedbacks?submissionId=...`, `GET /api/v1/feedbacks/threads` | 学生作业互动、教师待回复任务 |
 | 24 | 修改回答 | 已实现 | `PATCH /api/v1/responses/:responseId` | 教师互动交流 |
 | 25 | 删除回答 | 已实现 | `DELETE /api/v1/responses/:responseId` | 教师互动交流 |
 | 26 | 增加反馈信息 | 已实现 | `POST /api/v1/courses/:courseId/course-feedbacks` | Web/Mobile 课程反馈 |
@@ -42,10 +42,10 @@
 - `apps/server/tests/courses.integration.test.ts`：课程创建、详情、筛选、修改、删除。
 - `apps/server/tests/assignments.integration.test.ts`：作业发布、查询、学生提交状态、截止/已提交后的修改保护、取消和提交清理。
 - `apps/server/tests/submissions.integration.test.ts`：提交、查询、修改、批改和已批改保护。
-- `apps/server/tests/feedback.integration.test.ts`：反馈发布、查看、修改、删除和回答新增、修改、删除。
+- `apps/server/tests/feedback.integration.test.ts`：反馈发布、查看、总览、修改、删除和回答新增、修改、删除。
 - `apps/server/tests/course-feedbacks.integration.test.ts`：课程反馈新增、修改、查看、删除，以及教师/教务员查看。
 - `apps/server/tests/dashboard.integration.test.ts`：教务员首页摘要含课程反馈统计。
-- `apps/web/src/api.test.ts`：Web/Mobile 同源 API 客户端的无请求体写操作不会触发空 JSON body 错误。
+- `apps/web/src/api.test.ts`：Web/Mobile 同源 API 客户端的无请求体写操作不会触发空 JSON body 错误，并覆盖反馈线程总览查询参数。
 
 最新结果：后端 10 个测试文件、40 个测试用例通过；Web 5 个测试文件、8 个测试用例通过；根目录 `npm run test` 与脚本运行时解析测试均通过。
 

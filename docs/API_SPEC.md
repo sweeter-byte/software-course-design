@@ -182,6 +182,13 @@
 - 说明：按提交获取问题/反馈线程
 - 查询参数：`submissionId`
 
+### GET `/feedbacks/threads`
+
+- 说明：按课程、作业或状态获取问题/反馈线程总览，用于教师待回复任务台
+- 查询参数：`courseId`, `assignmentId`, `status`
+- 权限：学生仅查看自己的线程；教师仅查看自己授课课程线程；教务员可查看全部线程
+- 返回字段包含：`courseId`, `courseCode`, `courseName`, `assignmentId`, `assignmentTitle`, `submissionId`, `submissionStatus`, `studentName`, `studentNo`, `responses`
+
 ### PATCH `/feedbacks/:feedbackId`
 
 - 说明：学生修改自己的问题/反馈
