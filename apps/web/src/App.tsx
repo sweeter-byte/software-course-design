@@ -14,6 +14,7 @@ import type {
   SubmissionItem,
   UserRole,
 } from './domain'
+import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
 import { readInitialRuntimeState } from './runtime-state'
 import { formatDateTimeForDisplay, fromDateTimeLocalValue, toDateTimeLocalValue } from './utils/date'
 import { friendlyErrorMessage } from './utils/errors'
@@ -695,22 +696,6 @@ function App() {
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
 
-  const getSubmissionMutation = useMutation({
-    mutationFn: async () => {
-      if (!session || !selectedSubmissionId) return null
-      return api.getSubmission(apiBaseUrl, session.accessToken, selectedSubmissionId)
-    },
-    onSuccess: (payload) => {
-      if (!payload) return
-      const submission = payload.submission
-      const status = String(submission.status)
-      const score = submission.score == null ? '暂无分数' : `${String(submission.score)} 分`
-      setSubmissionContent(String(submission.content))
-      setNotice(`当前提交状态：${status}，批改结果：${score}。`)
-    },
-    onError: (error) => setNotice(extractErrorMessage(error)),
-  })
-
   const updateSubmissionMutation = useMutation({
     mutationFn: async () => {
       if (!session || !selectedSubmissionId) return null
@@ -882,7 +867,10 @@ function App() {
       : courses
   const selectedCourse = visibleCourses.find((course) => course.id === selectedCourseId) ?? null
   const selectedAssignment = assignments.find((assignment) => assignment.id === selectedAssignmentId) ?? null
-  const selectedSubmission = submissions.find((submission) => submission.id === selectedSubmissionId) ?? null
+  const selectedSubmission =
+    submissions.find((submission) => submission.id === selectedSubmissionId) ??
+    selectedAssignment?.mySubmission ??
+    null
   const roleDescription = currentRole ? roleWorkspaceDescriptions[currentRole] : '通过统一入口进入课程工作区。'
   const heroHighlights = session
     ? [
@@ -1306,12 +1294,15 @@ function App() {
               setSelectedCourseId(courseId || null)
               setSelectedAssignmentId(null)
               setSelectedSubmissionId(null)
+              setSubmissionContent('')
             })
           }}
           onAssignmentChange={(assignmentId) => {
             startTransition(() => {
-              setSelectedAssignmentId(assignmentId || null)
-              setSelectedSubmissionId(null)
+              const assignment = assignments.find((item) => item.id === assignmentId) ?? null
+              setSelectedAssignmentId(assignment?.id ?? null)
+              setSelectedSubmissionId(assignment?.mySubmission?.id ?? assignment?.submissionId ?? null)
+              setSubmissionContent(assignment?.mySubmission?.content ?? '')
             })
           }}
           onSubmissionChange={(submissionId) => setSelectedSubmissionId(submissionId || null)}
@@ -2136,7 +2127,8 @@ function App() {
                         onClick={() => {
                           startTransition(() => {
                             setSelectedAssignmentId(assignment.id)
-                            setSelectedSubmissionId(null)
+                            setSelectedSubmissionId(assignment.mySubmission?.id ?? assignment.submissionId ?? null)
+                            setSubmissionContent(assignment.mySubmission?.content ?? '')
                           })
                         }}
                       >
@@ -2163,11 +2155,11 @@ function App() {
               </SectionCard>
 
               <SectionCard
-                title={currentRole === 'teacher' ? '提交与批改' : '学习提交'}
+                title={currentRole === 'teacher' ? '提交与批改' : '我的作业'}
                 subtitle={
                   currentRole === 'teacher'
                     ? '教师查看提交并给出评语与分数。'
-                    : '学生完成作业提交后，可继续围绕批改结果发起交流。'
+                    : '学生在一个页面内完成作业查看、提交与反馈。'
                 }
                 className={
                   currentRole === 'teacher'
@@ -2180,50 +2172,22 @@ function App() {
                 }
               >
                 {currentRole === 'student' ? (
-                  <form
-                    className="stack-form"
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      createSubmissionMutation.mutate()
-                    }}
-                  >
-                    <p className="muted-paragraph">
-                      当前作业：
-                      <strong>{selectedAssignment?.title ?? '请先选择作业'}</strong>
-                    </p>
-                    <label>
-                      提交内容
-                      <textarea
-                        value={submissionContent}
-                        onChange={(event) => setSubmissionContent(event.target.value)}
-                      />
-                    </label>
-                    <button
-                      className="primary-button"
-                      type="submit"
-                      disabled={!selectedAssignment || createSubmissionMutation.isPending}
-                    >
-                      {createSubmissionMutation.isPending ? '提交中...' : '提交答案'}
-                    </button>
-                    <div className="inline-row">
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        disabled={!selectedSubmissionId || getSubmissionMutation.isPending}
-                        onClick={() => getSubmissionMutation.mutate()}
-                      >
-                        {getSubmissionMutation.isPending ? '查询中...' : '查看提交/成绩'}
-                      </button>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        disabled={!selectedSubmissionId || updateSubmissionMutation.isPending}
-                        onClick={() => updateSubmissionMutation.mutate()}
-                      >
-                        {updateSubmissionMutation.isPending ? '修改中...' : '修改答案'}
-                      </button>
-                    </div>
-                  </form>
+                  <StudentAssignmentWorkspace
+                    assignment={selectedAssignment}
+                    feedbacks={feedbacks}
+                    submissionContent={submissionContent}
+                    feedbackKind={feedbackDraft.kind}
+                    feedbackContent={feedbackDraft.content}
+                    isSubmitting={createSubmissionMutation.isPending}
+                    isUpdating={updateSubmissionMutation.isPending}
+                    isPostingFeedback={createFeedbackMutation.isPending}
+                    onSubmissionContentChange={setSubmissionContent}
+                    onSubmitAnswer={() => createSubmissionMutation.mutate()}
+                    onUpdateAnswer={() => updateSubmissionMutation.mutate()}
+                    onFeedbackKindChange={(kind) => setFeedbackDraft((current) => ({ ...current, kind }))}
+                    onFeedbackContentChange={(content) => setFeedbackDraft((current) => ({ ...current, content }))}
+                    onPostFeedback={() => createFeedbackMutation.mutate()}
+                  />
                 ) : (
                   <>
                     <div className="entity-list compact">

@@ -11,6 +11,10 @@ const contextBarSource = readFileSync(
   path.resolve(currentDir, 'components/layout/WorkspaceContextBar.tsx'),
   'utf8',
 )
+const studentAssignmentSource = readFileSync(
+  path.resolve(currentDir, 'features/assignments/StudentAssignmentWorkspace.tsx'),
+  'utf8',
+)
 
 describe('frontend display copy', () => {
   it('removes internal development wording from user-facing screens', () => {
@@ -44,11 +48,13 @@ describe('frontend display copy', () => {
   })
 
   it('contains redesigned workflow copy', () => {
-    const workflowSource = `${appSource}\n${contextBarSource}`
+    const workflowSource = `${appSource}\n${contextBarSource}\n${studentAssignmentSource}`
 
     expect(workflowSource).toContain('当前工作上下文')
     expect(workflowSource).toContain('课程 / 作业 / 提交')
     expect(workflowSource).toContain('我的作业')
     expect(workflowSource).toContain('待回复反馈')
+    expect(workflowSource).toContain('提交与成绩')
+    expect(workflowSource).toContain('批改后可发起作业问题或反馈')
   })
 })

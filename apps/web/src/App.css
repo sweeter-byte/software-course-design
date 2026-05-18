@@ -834,6 +834,67 @@ button {
   line-height: 1.55;
 }
 
+.student-assignment-workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.assignment-detail {
+  display: grid;
+  gap: 8px;
+}
+
+.assignment-detail h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.assignment-detail p {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.detail-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.detail-list div,
+.submission-summary {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+}
+
+.detail-list dt {
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.detail-list dd {
+  margin: 2px 0 0;
+}
+
+.submission-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.submission-summary span {
+  width: fit-content;
+  color: var(--nuaa-blue-dark);
+  font-weight: 800;
+}
+
+.submission-summary strong {
+  color: var(--nuaa-blue);
+  font-size: 1.3rem;
+}
+
 .state-panel {
   padding: 16px;
   display: grid;

@@ -172,14 +172,33 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
     const studentSubmissions = context.database
       .prepare(
         `
-          SELECT id, assignment_id
+          SELECT
+            id,
+            assignment_id,
+            student_id,
+            content,
+            status,
+            score,
+            teacher_feedback,
+            submitted_at,
+            graded_at
           FROM submissions
           WHERE student_id = ? AND assignment_id IN (${placeholders})
         `,
       )
-      .all(actor.sub, ...items.map((item) => item.id)) as { id: string; assignment_id: string }[]
+      .all(actor.sub, ...items.map((item) => item.id)) as Array<{
+      id: string
+      assignment_id: string
+      student_id: string
+      content: string
+      status: string
+      score: number | null
+      teacher_feedback: string | null
+      submitted_at: string | null
+      graded_at: string | null
+    }>
     const submissionByAssignmentId = new Map(
-      studentSubmissions.map((submission) => [submission.assignment_id, submission.id]),
+      studentSubmissions.map((submission) => [submission.assignment_id, submission]),
     )
 
     return {
@@ -187,11 +206,24 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
       message: 'ok',
       data: {
         items: assignmentItems.map((assignment) => {
-          const submissionId = submissionByAssignmentId.get(assignment.id) ?? null
+          const submission = submissionByAssignmentId.get(assignment.id) ?? null
           return {
             ...assignment,
-            hasSubmitted: submissionId !== null,
-            submissionId,
+            hasSubmitted: submission !== null,
+            submissionId: submission?.id ?? null,
+            mySubmission: submission
+              ? {
+                  id: submission.id,
+                  assignmentId: submission.assignment_id,
+                  studentId: submission.student_id,
+                  content: submission.content,
+                  status: submission.status,
+                  score: submission.score,
+                  teacherFeedback: submission.teacher_feedback,
+                  submittedAt: submission.submitted_at,
+                  gradedAt: submission.graded_at,
+                }
+              : null,
           }
         }),
       },
