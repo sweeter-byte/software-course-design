@@ -236,6 +236,10 @@ function App() {
     dimension: 'teaching' as CourseFeedbackItem['dimension'],
     content: '教师讲解清晰，希望增加更多项目案例。',
   })
+  const currentRole = session?.user.role
+  const navItems = currentRole ? roleNavigation[currentRole] : []
+  const visibleView = navItems.some((item) => item.view === activeView) ? activeView : 'dashboard'
+  const activePageTitle = viewLabels[visibleView]
 
   useEffect(() => {
     window.localStorage.setItem('cms_session', JSON.stringify(session))
@@ -327,7 +331,9 @@ function App() {
   })
 
   const feedbackThreadsQuery = useQuery({
-    enabled: Boolean(session?.user.role === 'teacher'),
+    enabled: Boolean(
+      session?.user.role === 'teacher' && (visibleView === 'grading' || visibleView === 'interaction'),
+    ),
     queryKey: [
       'feedbackThreads',
       apiBaseUrl,
@@ -889,10 +895,6 @@ function App() {
   const courseFeedbacks = (courseFeedbacksQuery.data?.items ?? []) as CourseFeedbackItem[]
   const feedbackThreads = (feedbackThreadsQuery.data?.items ?? []) as FeedbackItem[]
 
-  const currentRole = session?.user.role
-  const navItems = currentRole ? roleNavigation[currentRole] : []
-  const visibleView = navItems.some((item) => item.view === activeView) ? activeView : 'dashboard'
-  const activePageTitle = viewLabels[visibleView]
   const dashboardSummary = (dashboardQuery.data?.summary ?? {}) as SummaryRecord
   const visibleCourses =
     currentRole === 'teacher'
@@ -1013,6 +1015,7 @@ function App() {
                         <label>
                           手机号
                           <input
+                            autoComplete="username"
                             value={loginForm.phone}
                             onChange={(event) =>
                               setLoginForm((current) => ({ ...current, phone: event.target.value }))
@@ -1022,6 +1025,7 @@ function App() {
                         <label>
                           密码
                           <input
+                            autoComplete="current-password"
                             type="password"
                             value={loginForm.password}
                             onChange={(event) =>
@@ -1058,6 +1062,7 @@ function App() {
                           <label>
                             手机号
                             <input
+                              autoComplete="tel"
                               value={resetForm.phone}
                               onChange={(event) =>
                                 setResetForm((current) => ({ ...current, phone: event.target.value }))
@@ -1067,6 +1072,7 @@ function App() {
                           <label>
                             验证码
                             <input
+                              autoComplete="one-time-code"
                               value={resetForm.verificationCode}
                               onChange={(event) =>
                                 setResetForm((current) => ({
@@ -1079,6 +1085,7 @@ function App() {
                           <label>
                             新密码
                             <input
+                              autoComplete="new-password"
                               type="password"
                               value={resetForm.newPassword}
                               onChange={(event) =>
@@ -1092,6 +1099,7 @@ function App() {
                           <label>
                             确认新密码
                             <input
+                              autoComplete="new-password"
                               type="password"
                               value={resetForm.confirmPassword}
                               onChange={(event) =>
@@ -1142,6 +1150,7 @@ function App() {
                           <label>
                             手机号
                             <input
+                              autoComplete="tel"
                               value={registerForm.phone}
                               onChange={(event) =>
                                 setRegisterForm((current) => ({ ...current, phone: event.target.value }))
@@ -1178,6 +1187,7 @@ function App() {
                           <label>
                             密码
                             <input
+                              autoComplete="new-password"
                               type="password"
                               value={registerForm.password}
                               onChange={(event) =>
@@ -1188,6 +1198,7 @@ function App() {
                           <label>
                             确认密码
                             <input
+                              autoComplete="new-password"
                               type="password"
                               value={registerForm.confirmPassword}
                               onChange={(event) =>
@@ -1473,10 +1484,17 @@ function App() {
                     changePasswordMutation.mutate()
                   }}
                 >
+                  <input
+                    autoComplete="username"
+                    hidden
+                    readOnly
+                    value={session.user.phone}
+                  />
                   <div className="form-grid">
                     <label>
                       旧密码
                       <input
+                        autoComplete="current-password"
                         type="password"
                         value={passwordDraft.oldPassword}
                         onChange={(event) =>
@@ -1487,6 +1505,7 @@ function App() {
                     <label>
                       新密码
                       <input
+                        autoComplete="new-password"
                         type="password"
                         value={passwordDraft.newPassword}
                         onChange={(event) =>
@@ -1497,6 +1516,7 @@ function App() {
                     <label>
                       确认新密码
                       <input
+                        autoComplete="new-password"
                         type="password"
                         value={passwordDraft.confirmPassword}
                         onChange={(event) =>
@@ -2438,7 +2458,11 @@ function App() {
               <SectionCard
                 title="当前进度"
                 subtitle="帮助你快速查看当前课程、作业与提交状态。"
-                className={visibleView === 'account' || visibleView === 'courseAdmin' ? 'view-hidden' : undefined}
+                className={
+                  visibleView === 'account' || visibleView === 'courseAdmin'
+                    ? 'view-hidden'
+                    : 'current-progress-card'
+                }
               >
                 <ul className="bullet-list">
                   <li>课程：{selectedCourse ? `${selectedCourse.courseName} / ${selectedCourse.courseCode}` : '未选择'}</li>
