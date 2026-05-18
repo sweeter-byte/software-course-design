@@ -384,20 +384,22 @@ export const api = {
       courseId?: string
       assignmentId?: string
       status?: string
+      limit?: number
+      offset?: number
     } = {},
   ) {
     const params = new URLSearchParams()
 
     Object.entries(filters).forEach(([key, value]) => {
-      if (value) params.set(key, value)
+      if (value === undefined || value === null || value === '') return
+      params.set(key, String(value))
     })
 
     const query = params.toString() ? `?${params.toString()}` : ''
-    return requestJson<{ items: Array<Record<string, unknown>> }>(
-      baseUrl,
-      `/feedbacks/threads${query}`,
-      { token },
-    )
+    return requestJson<{
+      items: Array<Record<string, unknown>>
+      pagination?: { limit: number; offset: number; count: number }
+    }>(baseUrl, `/feedbacks/threads${query}`, { token })
   },
   createFeedback(
     baseUrl: string,

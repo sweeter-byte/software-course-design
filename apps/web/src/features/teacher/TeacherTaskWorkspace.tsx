@@ -1,6 +1,14 @@
-import { StatePanel } from '../../components/ui/StatePanel'
-import type { AssignmentItem, CourseFeedbackItem, CourseItem, FeedbackItem, SubmissionItem } from '../../domain'
-import { formatDateTimeForDisplay } from '../../utils/date'
+import type {
+  AssignmentItem,
+  CourseFeedbackItem,
+  CourseItem,
+  FeedbackItem,
+  SubmissionItem,
+} from '../../domain'
+import { CourseFeedbackOverview } from './CourseFeedbackOverview'
+import { FeedbackThreadList } from './FeedbackThreadList'
+import { PendingSubmissionList } from './PendingSubmissionList'
+import { SubmissionDetailCard } from './SubmissionDetailCard'
 
 type TeacherTaskWorkspaceProps = {
   course: CourseItem | null
@@ -49,7 +57,8 @@ export function TeacherTaskWorkspace({
   onCreateResponse,
   onSelectFeedbackThread,
 }: TeacherTaskWorkspaceProps) {
-  const selectedSubmission = submissions.find((submission) => submission.id === selectedSubmissionId) ?? null
+  const selectedSubmission =
+    submissions.find((submission) => submission.id === selectedSubmissionId) ?? null
   const pendingSubmissions = submissions.filter((submission) => submission.status !== 'graded')
   const openThreads = feedbackThreads.filter((feedback) => feedback.status === 'open')
 
@@ -86,50 +95,19 @@ export function TeacherTaskWorkspace({
           <span>{assignment?.status ?? '未选择作业'}</span>
         </div>
 
-        {isLoadingSubmissions ? (
-          <StatePanel title="提交正在加载" detail="正在获取当前作业的学生提交。" />
-        ) : pendingSubmissions.length > 0 ? (
-          <div className="entity-list compact">
-            {pendingSubmissions.map((submission) => (
-              <button
-                key={submission.id}
-                className={selectedSubmissionId === submission.id ? 'entity-card active' : 'entity-card'}
-                type="button"
-                onClick={() => onSelectSubmission(submission)}
-              >
-                <div>
-                  <strong>{submission.studentName ?? submission.studentId}</strong>
-                  <span>{submission.status}</span>
-                </div>
-                <p>{submission.content}</p>
-                <small>提交：{formatDateTimeForDisplay(submission.submittedAt)}</small>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <StatePanel
-            title="暂无待批改提交"
-            detail={assignment ? '当前作业没有需要批改的提交。' : '选择作业后会显示学生提交。'}
-          />
-        )}
+        <PendingSubmissionList
+          assignment={assignment}
+          submissions={pendingSubmissions}
+          selectedSubmissionId={selectedSubmissionId}
+          isLoading={isLoadingSubmissions}
+          onSelectSubmission={onSelectSubmission}
+        />
 
-        {selectedSubmission ? (
-          <div className="assignment-detail">
-            <h4>当前选中提交</h4>
-            <div className="submission-summary">
-              <span>
-                {selectedSubmission.studentName ?? selectedSubmission.studentId}
-                {selectedSubmission.studentNo ? `（${selectedSubmission.studentNo}）` : ''} /{' '}
-                {selectedSubmission.status}
-              </span>
-              <strong>{selectedSubmission.score == null ? '暂无分数' : `${selectedSubmission.score} 分`}</strong>
-              <p>{selectedSubmission.content}</p>
-              <p>{selectedSubmission.teacherFeedback ?? '教师暂未填写评语。'}</p>
-              <small>提交：{formatDateTimeForDisplay(selectedSubmission.submittedAt)}</small>
-              <small>批改：{formatDateTimeForDisplay(selectedSubmission.gradedAt)}</small>
-            </div>
-          </div>
-        ) : null}
+        <SubmissionDetailCard
+          submission={selectedSubmission}
+          pendingSubmissionId={selectedSubmissionId}
+          isLoading={isLoadingSubmissions}
+        />
 
         <form
           className="stack-form"
@@ -141,14 +119,26 @@ export function TeacherTaskWorkspace({
           <div className="form-grid">
             <label>
               分数
-              <input value={gradeScore} onChange={(event) => onGradeScoreChange(event.target.value)} />
+              <input
+                aria-label="提交分数"
+                value={gradeScore}
+                onChange={(event) => onGradeScoreChange(event.target.value)}
+              />
             </label>
             <label>
               评语
-              <textarea value={gradeFeedback} onChange={(event) => onGradeFeedbackChange(event.target.value)} />
+              <textarea
+                aria-label="批改评语"
+                value={gradeFeedback}
+                onChange={(event) => onGradeFeedbackChange(event.target.value)}
+              />
             </label>
           </div>
-          <button className="primary-button" type="submit" disabled={!selectedSubmission || isGrading}>
+          <button
+            className="primary-button"
+            type="submit"
+            disabled={!selectedSubmission || isGrading}
+          >
             {isGrading ? '写回中...' : '提交批改结果'}
           </button>
         </form>
@@ -164,55 +154,16 @@ export function TeacherTaskWorkspace({
         </div>
 
         <div className="thread-stack">
-          {isLoadingFeedbackThreads ? (
-            <StatePanel title="反馈正在加载" detail="正在同步学生作业问题与反馈。" />
-          ) : feedbackThreads.length > 0 ? (
-            feedbackThreads.map((feedback) => (
-              <article key={feedback.id} className="thread-card">
-                <div className="thread-meta">
-                  <span>{feedback.kind === 'question' ? '学生问题' : '学生反馈'}</span>
-                  <strong>{feedback.status}</strong>
-                </div>
-                <small>
-                  {feedback.courseName ?? '课程'} / {feedback.assignmentTitle ?? '作业'} /{' '}
-                  {feedback.studentName ?? feedback.studentId}
-                  {feedback.studentNo ? `（${feedback.studentNo}）` : ''}
-                </small>
-                <p>{feedback.content}</p>
-                <small>提交状态：{feedback.submissionStatus ?? '未知'}</small>
-
-                {feedback.responses.map((response) => (
-                  <div key={response.id} className="thread-response">
-                    <span>{response.teacherName ?? '教师'} 回复</span>
-                    <p>{response.content}</p>
-                  </div>
-                ))}
-
-                <div className="inline-row">
-                  <button className="ghost-button" type="button" onClick={() => onSelectFeedbackThread(feedback)}>
-                    查看对应提交
-                  </button>
-                </div>
-                <form
-                  className="inline-form"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    onCreateResponse(feedback.id)
-                  }}
-                >
-                  <input value={responseDraft} onChange={(event) => onResponseDraftChange(event.target.value)} />
-                  <button className="ghost-button" type="submit" disabled={isResponding}>
-                    回复学生
-                  </button>
-                </form>
-              </article>
-            ))
-          ) : (
-            <StatePanel
-              title="暂无待回复反馈"
-              detail={course ? '当前课程范围内没有学生作业反馈。' : '选择课程后会显示对应反馈线程。'}
-            />
-          )}
+          <FeedbackThreadList
+            course={course}
+            feedbackThreads={feedbackThreads}
+            responseDraft={responseDraft}
+            isLoading={isLoadingFeedbackThreads}
+            isResponding={isResponding}
+            onResponseDraftChange={onResponseDraftChange}
+            onCreateResponse={onCreateResponse}
+            onSelectFeedbackThread={onSelectFeedbackThread}
+          />
         </div>
       </section>
 
@@ -226,25 +177,10 @@ export function TeacherTaskWorkspace({
         </div>
 
         <div className="thread-stack">
-          {isLoadingCourseFeedbacks ? (
-            <StatePanel title="课程反馈正在加载" detail="正在同步学生课程反馈。" />
-          ) : courseFeedbacks.length > 0 ? (
-            courseFeedbacks.map((feedback) => (
-              <article key={feedback.id} className="thread-card">
-                <div className="thread-meta">
-                  <span>{feedback.courseName ?? '课程反馈'}</span>
-                  <strong>{feedback.status}</strong>
-                </div>
-                <p>{feedback.content}</p>
-                <small>
-                  学生：{feedback.studentName ?? feedback.studentId}
-                  {feedback.studentNo ? `（${feedback.studentNo}）` : ''}
-                </small>
-              </article>
-            ))
-          ) : (
-            <StatePanel title="暂无课程反馈" detail="学生提交课程反馈后会在这里展示。" />
-          )}
+          <CourseFeedbackOverview
+            courseFeedbacks={courseFeedbacks}
+            isLoading={isLoadingCourseFeedbacks}
+          />
         </div>
       </section>
     </div>

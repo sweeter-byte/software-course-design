@@ -19,10 +19,30 @@ const teacherTaskSource = readFileSync(
   path.resolve(currentDir, 'features/teacher/TeacherTaskWorkspace.tsx'),
   'utf8',
 )
+const feedbackThreadListSource = readFileSync(
+  path.resolve(currentDir, 'features/teacher/FeedbackThreadList.tsx'),
+  'utf8',
+)
+const courseFeedbackOverviewSource = readFileSync(
+  path.resolve(currentDir, 'features/teacher/CourseFeedbackOverview.tsx'),
+  'utf8',
+)
+const submissionDetailSource = readFileSync(
+  path.resolve(currentDir, 'features/teacher/SubmissionDetailCard.tsx'),
+  'utf8',
+)
+const loginShellSource = readFileSync(
+  path.resolve(currentDir, 'features/auth/LoginShell.tsx'),
+  'utf8',
+)
+const accountSectionSource = readFileSync(
+  path.resolve(currentDir, 'features/account/AccountSection.tsx'),
+  'utf8',
+)
 
 describe('frontend display copy', () => {
   it('removes internal development wording from user-facing screens', () => {
-    const combinedSource = `${appSource}\n${boundarySource}`
+    const combinedSource = `${appSource}\n${boundarySource}\n${loginShellSource}\n${accountSectionSource}`
     const bannedPhrases = [
       'API Base URL',
       '演示账号',
@@ -44,15 +64,24 @@ describe('frontend display copy', () => {
   })
 
   it('keeps the page copy product-facing', () => {
-    expect(appSource).toContain('账号登录')
-    expect(appSource).toContain('学生注册')
+    const productSource = `${appSource}\n${loginShellSource}\n${accountSectionSource}`
+    expect(productSource).toContain('账号登录')
+    expect(productSource).toContain('学生注册')
     expect(appSource).toContain('使用指引')
     expect(appSource).toContain('课程列表')
     expect(appSource).toContain('当前进度')
   })
 
   it('contains redesigned workflow copy', () => {
-    const workflowSource = `${appSource}\n${contextBarSource}\n${studentAssignmentSource}\n${teacherTaskSource}`
+    const workflowSource = [
+      appSource,
+      contextBarSource,
+      studentAssignmentSource,
+      teacherTaskSource,
+      feedbackThreadListSource,
+      courseFeedbackOverviewSource,
+      submissionDetailSource,
+    ].join('\n')
 
     expect(workflowSource).toContain('当前工作上下文')
     expect(workflowSource).toContain('课程 / 作业 / 提交')

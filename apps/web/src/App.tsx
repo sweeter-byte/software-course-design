@@ -14,8 +14,11 @@ import type {
   SubmissionItem,
   UserRole,
 } from './domain'
+import { AccountSection } from './features/account/AccountSection'
+import { LoginShell, type AuthMode } from './features/auth/LoginShell'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
+import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
 import { readInitialRuntimeState } from './runtime-state'
 import { formatDateTimeForDisplay, fromDateTimeLocalValue, toDateTimeLocalValue } from './utils/date'
 import { friendlyErrorMessage } from './utils/errors'
@@ -147,7 +150,7 @@ function App() {
   )
   const apiBaseUrl = initialRuntimeState.apiBaseUrl
   const [session, setSession] = useState<SessionPayload | null>(initialRuntimeState.session)
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'reset'>('login')
+  const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [activeView, setActiveView] = useState<WorkspaceView>('dashboard')
   const [notice, setNotice] = useState(
     initialRuntimeState.recoveredInvalidSession
@@ -198,9 +201,16 @@ function App() {
   const deferredCourseSemesterFilter = useDeferredValue(courseSemesterFilter)
   const deferredCourseLocationFilter = useDeferredValue(courseLocationFilter)
   const deferredCourseStatusFilter = useDeferredValue(courseStatusFilter)
-  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null)
-  const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null)
+  const {
+    selectedCourseId,
+    selectedAssignmentId,
+    selectedSubmissionId,
+    setSelectedCourseId,
+    setSelectedAssignmentId,
+    setSelectedSubmissionId,
+    resetAll: resetWorkspaceSelection,
+    resetBelowCourse,
+  } = useWorkspaceSelection()
   const [joinedCourseIds, setJoinedCourseIds] = useState<string[]>([])
   const [courseDraft, setCourseDraft] = useState({
     courseCode: 'SE-5001',
@@ -392,9 +402,7 @@ function App() {
       setNotice(`${roleLabels[payload.user.role]} ${payload.user.realName}，欢迎回来。`)
       startTransition(() => {
         setActiveView('dashboard')
-        setSelectedCourseId(null)
-        setSelectedAssignmentId(null)
-        setSelectedSubmissionId(null)
+        resetWorkspaceSelection()
       })
     },
     onError: (error) => {
@@ -627,9 +635,7 @@ function App() {
     onSuccess: () => {
       setNotice('课程已删除。')
       startTransition(() => {
-        setSelectedCourseId(null)
-        setSelectedAssignmentId(null)
-        setSelectedSubmissionId(null)
+        resetWorkspaceSelection()
       })
       queryClient.invalidateQueries({ queryKey: ['courses'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
@@ -905,14 +911,14 @@ function App() {
     currentRole === 'teacher'
       ? courses.filter((course) => course.teacherId === session?.user.id)
       : courses
-  const selectedCourse = visibleCourses.find((course) => course.id === selectedCourseId) ?? null
-  const selectedAssignment = assignments.find((assignment) => assignment.id === selectedAssignmentId) ?? null
-  const selectedSubmission =
-    currentRole === 'teacher'
-      ? (submissions.find((submission) => submission.id === selectedSubmissionId) ?? null)
-      : (selectedAssignment?.mySubmission ??
-        submissions.find((submission) => submission.id === selectedSubmissionId) ??
-        null)
+  const { selectedCourse, selectedAssignment, selectedSubmission, context: workspaceContext } =
+    resolveWorkspaceContext({
+      selection: { selectedCourseId, selectedAssignmentId, selectedSubmissionId },
+      visibleCourses,
+      assignments,
+      submissions,
+      currentRole,
+    })
   const roleDescription = currentRole ? roleWorkspaceDescriptions[currentRole] : '通过统一入口进入课程工作区。'
   const heroHighlights = session
     ? [
@@ -949,315 +955,29 @@ function App() {
 
   if (!session) {
     return (
-      <div className="login-shell">
-        <header className="login-header">
-          <div className="login-header-inner">
-            <div className="login-header-brand">
-              <div className="login-mark">课</div>
-              <div className="login-header-copy">
-                <p className="login-kicker">统一身份认证</p>
-                <h1>课程互动管理系统</h1>
-              </div>
-            </div>
-            <p className="login-header-meta">桌面端认证入口</p>
-          </div>
-        </header>
-
-        <main className="login-stage">
-          <section className="login-card">
-            <div className="login-layout">
-              <aside className="login-aside">
-                <div className="login-aside-head">
-                  <span className="login-aside-label">账号服务</span>
-                  <strong>统一身份认证</strong>
-                  <p>教师、教务员和学生通过同一入口完成认证，登录后进入课程工作区。</p>
-                </div>
-
-                <div className="login-support">
-                  {loginSupportNotes.map((note) => (
-                    <span key={note}>{note}</span>
-                  ))}
-                </div>
-
-                <ul className="login-guide-list">
-                  {loginGuideNotes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </aside>
-
-              <div className="login-form-column">
-                <div className="notice-bar login-notice">{notice}</div>
-
-                <div className="login-panel">
-                  <div className="login-panel-head">
-                    <div>
-                      <p className="eyebrow">身份认证</p>
-                      <h2>
-                        {authMode === 'login'
-                          ? '账号登录'
-                          : authMode === 'register'
-                            ? '学生注册'
-                            : '找回密码'}
-                      </h2>
-                      <p>
-                        {authMode === 'login'
-                          ? '输入手机号和密码后进入课程工作台。'
-                          : authMode === 'register'
-                            ? '完成注册后即可使用学生身份查看课程与提交作业。'
-                            : '通过手机号验证码重置密码后返回登录。'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {authMode === 'login' ? (
-                    <div className="auth-flow">
-                      <form
-                        className="stack-form"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          loginMutation.mutate()
-                        }}
-                      >
-                        <label>
-                          手机号
-                          <input
-                            autoComplete="username"
-                            value={loginForm.phone}
-                            onChange={(event) =>
-                              setLoginForm((current) => ({ ...current, phone: event.target.value }))
-                            }
-                          />
-                        </label>
-                        <label>
-                          密码
-                          <input
-                            autoComplete="current-password"
-                            type="password"
-                            value={loginForm.password}
-                            onChange={(event) =>
-                              setLoginForm((current) => ({ ...current, password: event.target.value }))
-                            }
-                          />
-                        </label>
-                        <button className="primary-button" type="submit" disabled={loginMutation.isPending}>
-                          {loginMutation.isPending ? '登录中...' : '进入工作台'}
-                        </button>
-                      </form>
-
-                      <div className="auth-entry-row">
-                        <button className="link-button" type="button" onClick={() => setAuthMode('reset')}>
-                          忘记密码？
-                        </button>
-                        <span>还没有学生账号？</span>
-                        <button className="link-button" type="button" onClick={() => setAuthMode('register')}>
-                          学生注册
-                        </button>
-                      </div>
-                    </div>
-                  ) : authMode === 'reset' ? (
-                    <div className="auth-flow">
-                      <form
-                        className="stack-form"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          resetPasswordMutation.mutate()
-                        }}
-                      >
-                        <p className="muted-paragraph">忘记密码时，可通过手机号验证码重置。</p>
-                        <div className="form-grid">
-                          <label>
-                            手机号
-                            <input
-                              autoComplete="tel"
-                              value={resetForm.phone}
-                              onChange={(event) =>
-                                setResetForm((current) => ({ ...current, phone: event.target.value }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            验证码
-                            <input
-                              autoComplete="one-time-code"
-                              value={resetForm.verificationCode}
-                              onChange={(event) =>
-                                setResetForm((current) => ({
-                                  ...current,
-                                  verificationCode: event.target.value,
-                                }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            新密码
-                            <input
-                              autoComplete="new-password"
-                              type="password"
-                              value={resetForm.newPassword}
-                              onChange={(event) =>
-                                setResetForm((current) => ({
-                                  ...current,
-                                  newPassword: event.target.value,
-                                }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            确认新密码
-                            <input
-                              autoComplete="new-password"
-                              type="password"
-                              value={resetForm.confirmPassword}
-                              onChange={(event) =>
-                                setResetForm((current) => ({
-                                  ...current,
-                                  confirmPassword: event.target.value,
-                                }))
-                              }
-                            />
-                          </label>
-                        </div>
-                        <div className="inline-row">
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => resetCodeMutation.mutate()}
-                            disabled={resetCodeMutation.isPending}
-                          >
-                            {resetCodeMutation.isPending ? '发送中...' : '获取重置验证码'}
-                          </button>
-                          <button
-                            className="primary-button"
-                            type="submit"
-                            disabled={resetPasswordMutation.isPending}
-                          >
-                            {resetPasswordMutation.isPending ? '重置中...' : '重置密码'}
-                          </button>
-                        </div>
-                      </form>
-
-                      <div className="auth-entry-row">
-                        <span>已完成重置或想起密码？</span>
-                        <button className="link-button" type="button" onClick={() => setAuthMode('login')}>
-                          返回账号登录
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="auth-flow">
-                      <form
-                        className="stack-form"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          registerMutation.mutate()
-                        }}
-                      >
-                        <div className="form-grid">
-                          <label>
-                            手机号
-                            <input
-                              autoComplete="tel"
-                              value={registerForm.phone}
-                              onChange={(event) =>
-                                setRegisterForm((current) => ({ ...current, phone: event.target.value }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            学号
-                            <input
-                              value={registerForm.studentId}
-                              onChange={(event) =>
-                                setRegisterForm((current) => ({ ...current, studentId: event.target.value }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            用户名
-                            <input
-                              value={registerForm.username}
-                              onChange={(event) =>
-                                setRegisterForm((current) => ({ ...current, username: event.target.value }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            真实姓名
-                            <input
-                              value={registerForm.realName}
-                              onChange={(event) =>
-                                setRegisterForm((current) => ({ ...current, realName: event.target.value }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            密码
-                            <input
-                              autoComplete="new-password"
-                              type="password"
-                              value={registerForm.password}
-                              onChange={(event) =>
-                                setRegisterForm((current) => ({ ...current, password: event.target.value }))
-                              }
-                            />
-                          </label>
-                          <label>
-                            确认密码
-                            <input
-                              autoComplete="new-password"
-                              type="password"
-                              value={registerForm.confirmPassword}
-                              onChange={(event) =>
-                                setRegisterForm((current) => ({ ...current, confirmPassword: event.target.value }))
-                              }
-                            />
-                          </label>
-                        </div>
-
-                        <div className="inline-row">
-                          <label className="grow">
-                            验证码
-                            <input
-                              value={registerForm.verificationCode}
-                              onChange={(event) =>
-                                setRegisterForm((current) => ({
-                                  ...current,
-                                  verificationCode: event.target.value,
-                                }))
-                              }
-                            />
-                          </label>
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => verificationMutation.mutate()}
-                            disabled={verificationMutation.isPending}
-                          >
-                            {verificationMutation.isPending ? '发送中...' : '获取验证码'}
-                          </button>
-                        </div>
-
-                        <button className="primary-button" type="submit" disabled={registerMutation.isPending}>
-                          {registerMutation.isPending ? '注册中...' : '完成注册'}
-                        </button>
-                      </form>
-
-                      <div className="auth-entry-row">
-                        <span>已有账号？</span>
-                        <button className="link-button" type="button" onClick={() => setAuthMode('login')}>
-                          返回账号登录
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </section>
-          <p className="login-footer">如需账号支持，请联系课程管理支持人员。</p>
-        </main>
-      </div>
+      <LoginShell
+        authMode={authMode}
+        notice={notice}
+        supportNotes={loginSupportNotes}
+        guideNotes={loginGuideNotes}
+        loginForm={loginForm}
+        registerForm={registerForm}
+        resetForm={resetForm}
+        isLoginPending={loginMutation.isPending}
+        isRegisterPending={registerMutation.isPending}
+        isResetPending={resetPasswordMutation.isPending}
+        isRegisterCodePending={verificationMutation.isPending}
+        isResetCodePending={resetCodeMutation.isPending}
+        onAuthModeChange={setAuthMode}
+        onLoginChange={setLoginForm}
+        onRegisterChange={setRegisterForm}
+        onResetChange={setResetForm}
+        onSubmitLogin={() => loginMutation.mutate()}
+        onSubmitRegister={() => registerMutation.mutate()}
+        onSubmitReset={() => resetPasswordMutation.mutate()}
+        onRequestRegisterCode={() => verificationMutation.mutate()}
+        onRequestResetCode={() => resetCodeMutation.mutate()}
+      />
     )
   }
 
@@ -1336,15 +1056,14 @@ function App() {
 
         <div className="notice-bar">{notice}</div>
         <WorkspaceContextBar
-          context={{ course: selectedCourse, assignment: selectedAssignment, submission: selectedSubmission }}
+          context={workspaceContext}
           courses={visibleCourses}
           assignments={assignments}
           submissions={submissions}
           onCourseChange={(courseId) => {
             startTransition(() => {
               setSelectedCourseId(courseId || null)
-              setSelectedAssignmentId(null)
-              setSelectedSubmissionId(null)
+              resetBelowCourse()
               setSubmissionContent('')
             })
           }}
@@ -1403,235 +1122,27 @@ function App() {
                 subtitle="修改个人资料、密码或注销当前账号。"
                 className={visibleView === 'account' ? 'wide-card' : 'view-hidden'}
               >
-                <form
-                  className="stack-form"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    updateProfileMutation.mutate()
-                  }}
-                >
-                  <div className="form-grid">
-                    <label>
-                      用户名
-                      <input
-                        value={profileDraft.username}
-                        onChange={(event) =>
-                          setProfileDraft((current) => ({ ...current, username: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      真实姓名
-                      <input
-                        value={profileDraft.realName}
-                        onChange={(event) =>
-                          setProfileDraft((current) => ({ ...current, realName: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      邮箱
-                      <input
-                        value={profileDraft.email}
-                        onChange={(event) =>
-                          setProfileDraft((current) => ({ ...current, email: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      性别
-                      <input
-                        value={profileDraft.gender}
-                        onChange={(event) =>
-                          setProfileDraft((current) => ({ ...current, gender: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      学院
-                      <input
-                        value={profileDraft.college}
-                        onChange={(event) =>
-                          setProfileDraft((current) => ({ ...current, college: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      专业
-                      <input
-                        value={profileDraft.major}
-                        onChange={(event) =>
-                          setProfileDraft((current) => ({ ...current, major: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      班级
-                      <input
-                        value={profileDraft.className}
-                        onChange={(event) =>
-                          setProfileDraft((current) => ({ ...current, className: event.target.value }))
-                        }
-                      />
-                    </label>
-                  </div>
-                  <button
-                    className="primary-button"
-                    type="submit"
-                    disabled={updateProfileMutation.isPending}
-                  >
-                    {updateProfileMutation.isPending ? '保存中...' : '保存资料'}
-                  </button>
-                </form>
-
-                <form
-                  className="stack-form"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    changePasswordMutation.mutate()
-                  }}
-                >
-                  <input
-                    autoComplete="username"
-                    hidden
-                    readOnly
-                    value={session.user.phone}
-                  />
-                  <div className="form-grid">
-                    <label>
-                      旧密码
-                      <input
-                        autoComplete="current-password"
-                        type="password"
-                        value={passwordDraft.oldPassword}
-                        onChange={(event) =>
-                          setPasswordDraft((current) => ({ ...current, oldPassword: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      新密码
-                      <input
-                        autoComplete="new-password"
-                        type="password"
-                        value={passwordDraft.newPassword}
-                        onChange={(event) =>
-                          setPasswordDraft((current) => ({ ...current, newPassword: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      确认新密码
-                      <input
-                        autoComplete="new-password"
-                        type="password"
-                        value={passwordDraft.confirmPassword}
-                        onChange={(event) =>
-                          setPasswordDraft((current) => ({
-                            ...current,
-                            confirmPassword: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                  </div>
-                  <div className="inline-row">
-                    <button
-                      className="ghost-button"
-                      type="submit"
-                      disabled={changePasswordMutation.isPending}
-                    >
-                      {changePasswordMutation.isPending ? '修改中...' : '修改密码'}
-                    </button>
-                    <button
-                      className="danger-button"
-                      type="button"
-                      onClick={() => cancelAccountMutation.mutate()}
-                      disabled={cancelAccountMutation.isPending}
-                    >
-                      {cancelAccountMutation.isPending ? '注销中...' : '注销账号'}
-                    </button>
-                  </div>
-                </form>
-
-                <form
-                  className="stack-form"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    changePhoneMutation.mutate()
-                  }}
-                >
-                  <div className="form-grid">
-                    <label>
-                      旧手机号
-                      <input
-                        value={phoneDraft.oldPhone}
-                        onChange={(event) =>
-                          setPhoneDraft((current) => ({ ...current, oldPhone: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      旧手机号验证码
-                      <input
-                        value={phoneDraft.oldVerificationCode}
-                        onChange={(event) =>
-                          setPhoneDraft((current) => ({
-                            ...current,
-                            oldVerificationCode: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      新手机号
-                      <input
-                        value={phoneDraft.newPhone}
-                        onChange={(event) =>
-                          setPhoneDraft((current) => ({ ...current, newPhone: event.target.value }))
-                        }
-                      />
-                    </label>
-                    <label>
-                      新手机号验证码
-                      <input
-                        value={phoneDraft.newVerificationCode}
-                        onChange={(event) =>
-                          setPhoneDraft((current) => ({
-                            ...current,
-                            newVerificationCode: event.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-                  </div>
-                  <div className="inline-row">
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => phoneCodeMutation.mutate('old')}
-                      disabled={phoneCodeMutation.isPending}
-                    >
-                      获取旧号验证码
-                    </button>
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => phoneCodeMutation.mutate('new')}
-                      disabled={phoneCodeMutation.isPending}
-                    >
-                      获取新号验证码
-                    </button>
-                    <button
-                      className="primary-button"
-                      type="submit"
-                      disabled={changePhoneMutation.isPending}
-                    >
-                      {changePhoneMutation.isPending ? '修改中...' : '修改手机号'}
-                    </button>
-                  </div>
-                </form>
+                <AccountSection
+                  phone={session.user.phone}
+                  profile={profileDraft}
+                  password={passwordDraft}
+                  phoneChange={phoneDraft}
+                  isProfilePending={updateProfileMutation.isPending}
+                  isPasswordPending={changePasswordMutation.isPending}
+                  isCancelPending={cancelAccountMutation.isPending}
+                  isPhoneCodePending={phoneCodeMutation.isPending}
+                  isPhoneChangePending={changePhoneMutation.isPending}
+                  onProfileChange={setProfileDraft}
+                  onPasswordChange={setPasswordDraft}
+                  onPhoneChange={setPhoneDraft}
+                  onSubmitProfile={() => updateProfileMutation.mutate()}
+                  onSubmitPassword={() => changePasswordMutation.mutate()}
+                  onCancelAccount={() => cancelAccountMutation.mutate()}
+                  onRequestPhoneCode={(target) => phoneCodeMutation.mutate(target)}
+                  onSubmitPhoneChange={() => changePhoneMutation.mutate()}
+                />
               </SectionCard>
+
 
               <SectionCard
                 title="课程列表"
@@ -1689,8 +1200,7 @@ function App() {
                         onClick={() => {
                           startTransition(() => {
                             setSelectedCourseId(course.id)
-                            setSelectedAssignmentId(null)
-                            setSelectedSubmissionId(null)
+                            resetBelowCourse()
                           })
                         }}
                       >

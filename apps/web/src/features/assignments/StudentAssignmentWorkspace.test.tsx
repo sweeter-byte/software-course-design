@@ -1,10 +1,11 @@
-import { renderToStaticMarkup } from 'react-dom/server'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { AssignmentItem } from '../../domain'
 import { StudentAssignmentWorkspace } from './StudentAssignmentWorkspace'
 
-const gradedAssignment: AssignmentItem = {
+const baseAssignment: AssignmentItem = {
   id: 'assignment-1',
   courseId: 'course-1',
   teacherId: 'teacher-1',
@@ -14,6 +15,10 @@ const gradedAssignment: AssignmentItem = {
   startAt: '2026-05-01T00:00:00.000Z',
   dueAt: '2026-05-20T16:00:00.000Z',
   status: 'published',
+}
+
+const gradedAssignment: AssignmentItem = {
+  ...baseAssignment,
   mySubmission: {
     id: 'submission-1',
     assignmentId: 'assignment-1',
@@ -27,29 +32,123 @@ const gradedAssignment: AssignmentItem = {
   },
 }
 
+const submittedAssignment: AssignmentItem = {
+  ...baseAssignment,
+  mySubmission: {
+    id: 'submission-1',
+    assignmentId: 'assignment-1',
+    studentId: 'student-1',
+    content: '学生答案',
+    status: 'submitted',
+    submittedAt: '2026-05-10T10:00:00.000Z',
+  },
+}
+
+function renderWorkspace(
+  overrides: Partial<Parameters<typeof StudentAssignmentWorkspace>[0]> = {},
+) {
+  const onSubmissionContentChange = vi.fn()
+  const onSubmitAnswer = vi.fn()
+  const onUpdateAnswer = vi.fn()
+  const onFeedbackKindChange = vi.fn()
+  const onFeedbackContentChange = vi.fn()
+  const onPostFeedback = vi.fn()
+
+  render(
+    <StudentAssignmentWorkspace
+      assignment={baseAssignment}
+      feedbacks={[]}
+      submissionContent=""
+      feedbackKind="question"
+      feedbackContent=""
+      isSubmitting={false}
+      isUpdating={false}
+      isPostingFeedback={false}
+      onSubmissionContentChange={onSubmissionContentChange}
+      onSubmitAnswer={onSubmitAnswer}
+      onUpdateAnswer={onUpdateAnswer}
+      onFeedbackKindChange={onFeedbackKindChange}
+      onFeedbackContentChange={onFeedbackContentChange}
+      onPostFeedback={onPostFeedback}
+      {...overrides}
+    />,
+  )
+
+  return {
+    onSubmissionContentChange,
+    onSubmitAnswer,
+    onUpdateAnswer,
+    onFeedbackKindChange,
+    onFeedbackContentChange,
+    onPostFeedback,
+  }
+}
+
 describe('StudentAssignmentWorkspace', () => {
   it('keeps graded submissions read-only and blocks answer updates', () => {
-    const html = renderToStaticMarkup(
-      <StudentAssignmentWorkspace
-        assignment={gradedAssignment}
-        feedbacks={[]}
-        submissionContent="学生最终答案"
-        feedbackKind="question"
-        feedbackContent=""
-        isSubmitting={false}
-        isUpdating={false}
-        isPostingFeedback={false}
-        onSubmissionContentChange={vi.fn()}
-        onSubmitAnswer={vi.fn()}
-        onUpdateAnswer={vi.fn()}
-        onFeedbackKindChange={vi.fn()}
-        onFeedbackContentChange={vi.fn()}
-        onPostFeedback={vi.fn()}
-      />,
-    )
+    renderWorkspace({
+      assignment: gradedAssignment,
+      submissionContent: '学生最终答案',
+    })
 
-    expect(html).toContain('已批改不可修改')
-    expect(html.toLowerCase()).toContain('readonly=""')
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>已批改不可修改<\/button>/)
+    const submitButton = screen.getByRole('button', { name: '已批改不可修改' })
+    expect(submitButton).toBeDisabled()
+    expect(screen.getByLabelText('提交内容')).toHaveAttribute('readonly')
+  })
+
+  it('shows update button for ungraded submissions and emits onUpdateAnswer', async () => {
+    const user = userEvent.setup()
+    const { onUpdateAnswer, onSubmitAnswer } = renderWorkspace({
+      assignment: submittedAssignment,
+      submissionContent: '学生答案',
+    })
+
+    const button = screen.getByRole('button', { name: '修改答案' })
+    expect(button).not.toBeDisabled()
+    await user.click(button)
+    expect(onUpdateAnswer).toHaveBeenCalledTimes(1)
+    expect(onSubmitAnswer).not.toHaveBeenCalled()
+  })
+
+  it('shows submit button for new submissions and emits onSubmitAnswer', async () => {
+    const user = userEvent.setup()
+    const { onSubmitAnswer, onUpdateAnswer } = renderWorkspace({
+      assignment: baseAssignment,
+      submissionContent: '答案草稿',
+    })
+
+    const button = screen.getByRole('button', { name: '提交答案' })
+    expect(button).not.toBeDisabled()
+    await user.click(button)
+    expect(onSubmitAnswer).toHaveBeenCalledTimes(1)
+    expect(onUpdateAnswer).not.toHaveBeenCalled()
+  })
+
+  it('disables the feedback form before grading is completed', () => {
+    renderWorkspace({
+      assignment: submittedAssignment,
+    })
+
+    const feedbackKindSelect = screen.getByLabelText('类型')
+    const feedbackContent = screen.getByLabelText('内容')
+    const postButton = screen.getByRole('button', { name: '发布问题/反馈' })
+
+    expect(feedbackKindSelect).toBeDisabled()
+    expect(feedbackContent).toBeDisabled()
+    expect(postButton).toBeDisabled()
+  })
+
+  it('enables the feedback form once the submission is graded', () => {
+    renderWorkspace({
+      assignment: gradedAssignment,
+    })
+
+    const feedbackKindSelect = screen.getByLabelText('类型')
+    const feedbackContent = screen.getByLabelText('内容')
+    const postButton = screen.getByRole('button', { name: '发布问题/反馈' })
+
+    expect(feedbackKindSelect).not.toBeDisabled()
+    expect(feedbackContent).not.toBeDisabled()
+    expect(postButton).not.toBeDisabled()
   })
 })
