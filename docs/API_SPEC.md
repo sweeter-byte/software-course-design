@@ -94,11 +94,14 @@
 ### GET `/courses`
 
 - 说明：多角色查询课程
-- 查询参数：`keyword`, `teacherId`, `semester`, `status`, `page`, `pageSize`, `mine`
+- 查询参数：`keyword`, `teacherId`, `semester`, `location`, `status`, `enrolledOnly`
+- `enrolledOnly=true` 仅对学生有效，返回学生已选课程
+- 学生角色调用时，返回项额外携带 `enrolled: boolean`，标记该课程是否已加入；其他角色无此字段
 
 ### GET `/courses/:courseId`
 
 - 说明：课程详情
+- 学生角色调用时，返回的 `course` 额外携带 `enrolled: boolean`
 
 ### PATCH `/courses/:courseId`
 

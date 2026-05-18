@@ -13,6 +13,7 @@ export type CourseItem = {
   startDate?: string | null
   endDate?: string | null
   status: string
+  enrolled?: boolean
 }
 
 export type AssignmentItem = {

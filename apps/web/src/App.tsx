@@ -211,7 +211,6 @@ function App() {
     resetAll: resetWorkspaceSelection,
     resetBelowCourse,
   } = useWorkspaceSelection()
-  const [joinedCourseIds, setJoinedCourseIds] = useState<string[]>([])
   const [courseDraft, setCourseDraft] = useState({
     courseCode: 'SE-5001',
     courseName: '软件工程实践',
@@ -649,19 +648,19 @@ function App() {
       return api.enrollCourse(apiBaseUrl, session.accessToken, courseId)
     },
     onSuccess: (_, courseId) => {
-      setJoinedCourseIds((current) => [...new Set([...current, courseId])])
       setNotice('已加入课程，可以开始查看作业与学习内容。')
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       startTransition(() => {
         setSelectedCourseId(courseId)
       })
     },
-    onError: (error, courseId) => {
+    onError: (error) => {
       const message = extractErrorMessage(error)
 
       if (message.includes('ALREADY_ENROLLED') || message.includes('already_enrolled')) {
-        setJoinedCourseIds((current) => [...new Set([...current, courseId])])
         setNotice('你已加入该课程。')
+        queryClient.invalidateQueries({ queryKey: ['courses'] })
         return
       }
 
@@ -911,6 +910,10 @@ function App() {
     currentRole === 'teacher'
       ? courses.filter((course) => course.teacherId === session?.user.id)
       : courses
+  const enrolledCourseCount =
+    currentRole === 'student'
+      ? visibleCourses.filter((course) => course.enrolled).length
+      : 0
   const { selectedCourse, selectedAssignment, selectedSubmission, context: workspaceContext } =
     resolveWorkspaceContext({
       selection: { selectedCourseId, selectedAssignmentId, selectedSubmissionId },
@@ -924,7 +927,7 @@ function App() {
     ? [
         {
           label: currentRole === 'student' ? '已加入课程' : '当前课程数',
-          value: currentRole === 'student' ? joinedCourseIds.length : visibleCourses.length,
+          value: currentRole === 'student' ? enrolledCourseCount : visibleCourses.length,
         },
         {
           label: '作业数',
@@ -1212,7 +1215,7 @@ function App() {
                         <small>{course.scheduleText}</small>
                         {currentRole === 'student' ? (
                           <span className="status-tag">
-                            {joinedCourseIds.includes(course.id) ? '已加入' : '可加入'}
+                            {course.enrolled ? '已加入' : '可加入'}
                           </span>
                         ) : null}
                       </button>

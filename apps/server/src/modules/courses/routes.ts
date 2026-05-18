@@ -26,10 +26,11 @@ type CourseRow = {
   start_date: string
   end_date: string
   status: string
+  enrolled?: number | null
 }
 
-function toCourse(row: CourseRow) {
-  return {
+function toCourse(row: CourseRow, options?: { includeEnrolled?: boolean }) {
+  const base = {
     id: row.id,
     courseCode: row.course_code,
     courseName: row.course_name,
@@ -43,9 +44,45 @@ function toCourse(row: CourseRow) {
     endDate: row.end_date,
     status: row.status,
   }
+
+  if (options?.includeEnrolled) {
+    return { ...base, enrolled: Boolean(row.enrolled) }
+  }
+
+  return base
 }
 
-function getCourseById(database: DatabaseSync, courseId: string) {
+function getCourseById(database: DatabaseSync, courseId: string, studentId?: string) {
+  if (studentId) {
+    return database
+      .prepare(
+        `
+          SELECT
+            courses.id,
+            courses.course_code,
+            courses.course_name,
+            courses.description,
+            courses.teacher_id,
+            courses.semester,
+            courses.location,
+            courses.schedule_text,
+            courses.capacity,
+            courses.start_date,
+            courses.end_date,
+            courses.status,
+            CASE WHEN enrollments.id IS NULL THEN 0 ELSE 1 END AS enrolled
+          FROM courses
+          LEFT JOIN course_enrollments AS enrollments
+            ON enrollments.course_id = courses.id
+            AND enrollments.student_id = ?
+            AND enrollments.status = 'enrolled'
+          WHERE courses.id = ?
+          LIMIT 1
+        `,
+      )
+      .get(studentId, courseId) as CourseRow | undefined
+  }
+
   return database
     .prepare(
       `
@@ -147,9 +184,10 @@ export function registerCourseRoutes(app: FastifyInstance, context: CourseRouteC
   })
 
   app.get('/:courseId', async (request) => {
-    await requireRole(request, ['student', 'teacher', 'officer'])
+    const actor = await requireRole(request, ['student', 'teacher', 'officer'])
     const params = request.params as { courseId: string }
-    const course = getCourseById(context.database, params.courseId)
+    const studentId = actor.role === 'student' ? actor.sub : undefined
+    const course = getCourseById(context.database, params.courseId, studentId)
 
     if (!course) {
       throw new AppError('course_not_found', 404, 'COURSE_NOT_FOUND')
@@ -159,7 +197,7 @@ export function registerCourseRoutes(app: FastifyInstance, context: CourseRouteC
       success: true,
       message: 'ok',
       data: {
-        course: toCourse(course),
+        course: toCourse(course, { includeEnrolled: Boolean(studentId) }),
       },
       meta: {
         requestId: request.id,
@@ -168,7 +206,7 @@ export function registerCourseRoutes(app: FastifyInstance, context: CourseRouteC
   })
 
   app.get('/', async (request) => {
-    await requireRole(request, ['student', 'teacher', 'officer'])
+    const actor = await requireRole(request, ['student', 'teacher', 'officer'])
 
     const query = (request.query ?? {}) as {
       keyword?: string
@@ -176,66 +214,99 @@ export function registerCourseRoutes(app: FastifyInstance, context: CourseRouteC
       semester?: string
       location?: string
       status?: string
+      enrolledOnly?: string
     }
     const keyword = query.keyword?.trim()
     const filters: string[] = []
-    const params: string[] = []
+    const params: (string | number)[] = []
+    const isStudent = actor.role === 'student'
+    const enrolledOnly = isStudent && query.enrolledOnly === 'true'
 
     if (keyword) {
-      filters.push('(course_name LIKE ? OR course_code LIKE ?)')
+      filters.push('(courses.course_name LIKE ? OR courses.course_code LIKE ?)')
       params.push(`%${keyword}%`, `%${keyword}%`)
     }
 
     if (query.teacherId) {
-      filters.push('teacher_id = ?')
+      filters.push('courses.teacher_id = ?')
       params.push(query.teacherId)
     }
 
     if (query.semester) {
-      filters.push('semester = ?')
+      filters.push('courses.semester = ?')
       params.push(query.semester)
     }
 
     if (query.location) {
-      filters.push('location LIKE ?')
+      filters.push('courses.location LIKE ?')
       params.push(`%${query.location}%`)
     }
 
     if (query.status) {
-      filters.push('status = ?')
+      filters.push('courses.status = ?')
       params.push(query.status)
+    }
+
+    if (enrolledOnly) {
+      filters.push('enrollments.id IS NOT NULL')
     }
 
     const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : ''
 
-    const items = context.database
-      .prepare(
-        `
+    const sql = isStudent
+      ? `
           SELECT
-            id,
-            course_code,
-            course_name,
-            description,
-            teacher_id,
-            semester,
-            location,
-            schedule_text,
-            capacity,
-            start_date,
-            end_date,
-            status
+            courses.id,
+            courses.course_code,
+            courses.course_name,
+            courses.description,
+            courses.teacher_id,
+            courses.semester,
+            courses.location,
+            courses.schedule_text,
+            courses.capacity,
+            courses.start_date,
+            courses.end_date,
+            courses.status,
+            CASE WHEN enrollments.id IS NULL THEN 0 ELSE 1 END AS enrolled
+          FROM courses
+          LEFT JOIN course_enrollments AS enrollments
+            ON enrollments.course_id = courses.id
+            AND enrollments.student_id = ?
+            AND enrollments.status = 'enrolled'
+          ${whereClause}
+          ORDER BY courses.created_at DESC
+        `
+      : `
+          SELECT
+            courses.id,
+            courses.course_code,
+            courses.course_name,
+            courses.description,
+            courses.teacher_id,
+            courses.semester,
+            courses.location,
+            courses.schedule_text,
+            courses.capacity,
+            courses.start_date,
+            courses.end_date,
+            courses.status
           FROM courses
           ${whereClause}
-          ORDER BY created_at DESC
-        `,
-      )
-      .all(...params) as CourseRow[]
+          ORDER BY courses.created_at DESC
+        `
+
+    const queryParams = isStudent ? [actor.sub, ...params] : params
+
+    const items = context.database
+      .prepare(sql)
+      .all(...queryParams) as CourseRow[]
 
     return {
       success: true,
       message: 'ok',
       data: {
-        items: items.map(toCourse),
+        items: items.map((row) => toCourse(row, { includeEnrolled: isStudent })),
       },
       meta: {
         requestId: request.id,
