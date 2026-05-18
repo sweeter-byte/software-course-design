@@ -120,7 +120,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
     }
     const filters: string[] = []
     const values: string[] = []
-    const status = query.status?.trim()
+    const status = query.status?.trim().toLowerCase()
 
     if (status) {
       if (!['open', 'resolved', 'deleted'].includes(status)) {

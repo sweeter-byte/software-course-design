@@ -41,6 +41,7 @@ export function StudentAssignmentWorkspace({
 
   const submission = assignment.mySubmission ?? null
   const isGraded = submission?.status === 'graded'
+  const canEditSubmission = !isGraded
 
   return (
     <div className="student-assignment-workspace">
@@ -69,6 +70,7 @@ export function StudentAssignmentWorkspace({
         onSubmit={(event) => {
           event.preventDefault()
           if (submission) {
+            if (!canEditSubmission) return
             onUpdateAnswer()
             return
           }
@@ -89,11 +91,23 @@ export function StudentAssignmentWorkspace({
         </div>
         <label>
           提交内容
-          <textarea value={submissionContent} onChange={(event) => onSubmissionContentChange(event.target.value)} />
+          <textarea
+            value={submissionContent}
+            onChange={(event) => onSubmissionContentChange(event.target.value)}
+            readOnly={!canEditSubmission}
+          />
         </label>
         <div className="inline-row">
-          <button className="primary-button" type="submit" disabled={isSubmitting || isUpdating}>
-            {submission ? (isUpdating ? '修改中...' : '修改答案') : isSubmitting ? '提交中...' : '提交答案'}
+          <button className="primary-button" type="submit" disabled={!canEditSubmission || isSubmitting || isUpdating}>
+            {submission
+              ? isGraded
+                ? '已批改不可修改'
+                : isUpdating
+                  ? '修改中...'
+                  : '修改答案'
+              : isSubmitting
+                ? '提交中...'
+                : '提交答案'}
           </button>
         </div>
       </form>

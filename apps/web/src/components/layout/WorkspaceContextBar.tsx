@@ -24,6 +24,12 @@ export function WorkspaceContextBar({
   onAssignmentChange,
   onSubmissionChange,
 }: WorkspaceContextBarProps) {
+  const currentSubmission = context.submission
+  const submissionOptions =
+    currentSubmission && !submissions.some((submission) => submission.id === currentSubmission.id)
+      ? [currentSubmission, ...submissions]
+      : submissions
+
   return (
     <section className="context-bar" aria-label="当前工作上下文">
       <div>
@@ -61,10 +67,10 @@ export function WorkspaceContextBar({
         <select
           value={context.submission?.id ?? ''}
           onChange={(event) => onSubmissionChange(event.target.value)}
-          disabled={!context.assignment || submissions.length === 0}
+          disabled={!context.assignment || submissionOptions.length === 0}
         >
           <option value="">请选择提交</option>
-          {submissions.map((submission) => (
+          {submissionOptions.map((submission) => (
             <option key={submission.id} value={submission.id}>
               {submissionLabel(submission)}
             </option>

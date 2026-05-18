@@ -113,6 +113,24 @@ export function TeacherTaskWorkspace({
           />
         )}
 
+        {selectedSubmission ? (
+          <div className="assignment-detail">
+            <h4>当前选中提交</h4>
+            <div className="submission-summary">
+              <span>
+                {selectedSubmission.studentName ?? selectedSubmission.studentId}
+                {selectedSubmission.studentNo ? `（${selectedSubmission.studentNo}）` : ''} /{' '}
+                {selectedSubmission.status}
+              </span>
+              <strong>{selectedSubmission.score == null ? '暂无分数' : `${selectedSubmission.score} 分`}</strong>
+              <p>{selectedSubmission.content}</p>
+              <p>{selectedSubmission.teacherFeedback ?? '教师暂未填写评语。'}</p>
+              <small>提交：{formatDateTimeForDisplay(selectedSubmission.submittedAt)}</small>
+              <small>批改：{formatDateTimeForDisplay(selectedSubmission.gradedAt)}</small>
+            </div>
+          </div>
+        ) : null}
+
         <form
           className="stack-form"
           onSubmit={(event) => {

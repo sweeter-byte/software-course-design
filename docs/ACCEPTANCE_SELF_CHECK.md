@@ -47,7 +47,7 @@
 - `apps/server/tests/dashboard.integration.test.ts`：教务员首页摘要含课程反馈统计。
 - `apps/web/src/api.test.ts`：Web/Mobile 同源 API 客户端的无请求体写操作不会触发空 JSON body 错误，并覆盖反馈线程总览查询参数。
 
-最新结果：后端 10 个测试文件、42 个测试用例通过；Web 7 个测试文件、15 个测试用例通过；根目录测试、全工作区类型检查、Server/Web 构建和全工作区 lint 均通过。
+最新结果：后端 10 个测试文件、43 个测试用例通过；Web 10 个测试文件、19 个测试用例通过；根目录测试、全工作区类型检查、Server/Web 构建和全工作区 lint 均通过。
 
 ## Web 端工作流验收说明
 

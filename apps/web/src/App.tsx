@@ -645,6 +645,7 @@ function App() {
     onSuccess: (_, courseId) => {
       setJoinedCourseIds((current) => [...new Set([...current, courseId])])
       setNotice('已加入课程，可以开始查看作业与学习内容。')
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       startTransition(() => {
         setSelectedCourseId(courseId)
       })
@@ -736,6 +737,8 @@ function App() {
     onSuccess: () => {
       setNotice('答案已修改。')
       queryClient.invalidateQueries({ queryKey: ['submissions'] })
+      queryClient.invalidateQueries({ queryKey: ['assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
@@ -756,6 +759,8 @@ function App() {
       queryClient.invalidateQueries({ queryKey: ['submissions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
+      queryClient.invalidateQueries({ queryKey: ['assignments'] })
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
@@ -903,9 +908,11 @@ function App() {
   const selectedCourse = visibleCourses.find((course) => course.id === selectedCourseId) ?? null
   const selectedAssignment = assignments.find((assignment) => assignment.id === selectedAssignmentId) ?? null
   const selectedSubmission =
-    submissions.find((submission) => submission.id === selectedSubmissionId) ??
-    selectedAssignment?.mySubmission ??
-    null
+    currentRole === 'teacher'
+      ? (submissions.find((submission) => submission.id === selectedSubmissionId) ?? null)
+      : (selectedAssignment?.mySubmission ??
+        submissions.find((submission) => submission.id === selectedSubmissionId) ??
+        null)
   const roleDescription = currentRole ? roleWorkspaceDescriptions[currentRole] : '通过统一入口进入课程工作区。'
   const heroHighlights = session
     ? [
@@ -2122,7 +2129,10 @@ function App() {
                           {courseFeedbackDimensionLabels[feedback.dimension]} · {feedback.courseName}
                         </span>
                         <p>{feedback.content}</p>
-                        <small>学生：{feedback.studentId}</small>
+                        <small>
+                          学生：{feedback.studentName ?? feedback.studentId}
+                          {feedback.studentNo ? `（${feedback.studentNo}）` : ''}
+                        </small>
                         {currentRole === 'student' ? (
                           <div className="inline-row">
                             <button
@@ -2273,6 +2283,12 @@ function App() {
                     onResponseDraftChange={setResponseDraft}
                     onCreateResponse={(feedbackId) => createResponseMutation.mutate(feedbackId)}
                     onSelectFeedbackThread={(feedback) => {
+                      const submission = submissions.find((item) => item.id === feedback.submissionId) ?? null
+                      setSubmissionContent(submission?.content ?? '')
+                      setGradeDraft({
+                        score: submission?.score == null ? '' : String(submission.score),
+                        teacherFeedback: submission?.teacherFeedback ?? '',
+                      })
                       startTransition(() => {
                         setSelectedCourseId(feedback.courseId ?? selectedCourseId)
                         setSelectedAssignmentId(feedback.assignmentId)

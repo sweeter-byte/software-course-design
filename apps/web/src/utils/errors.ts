@@ -11,6 +11,10 @@ const friendlyMessages: Record<string, string> = {
   forbidden: '当前账号暂无此操作权限。',
   not_found: '未找到对应内容。',
   feedback_requires_grading: '该提交尚未批改，批改后才能发起作业问题或反馈。',
+  submission_already_graded: '该提交已批改，不能再修改答案。',
+  assignment_already_submitted: '该作业已经提交，不能重复提交。',
+  assignment_deadline_passed: '作业截止时间已过，不能继续提交或修改。',
+  course_enrollment_required: '请先加入课程，再进行相关操作。',
   submission_id_required: '请先选择一条提交记录。',
   internal_server_error: '系统暂时繁忙，请稍后再试。',
 }

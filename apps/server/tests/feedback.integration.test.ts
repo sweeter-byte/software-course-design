@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { relativeIsoDate } from './test-dates'
 
+const feedbackThreadCourseCode = 'SE-4701'
+
 async function buildFeedbackApp() {
   const { buildApp } = await import('../src/app')
   const app = await buildApp({
@@ -80,7 +82,7 @@ async function createFeedbackThread() {
       authorization: `Bearer ${officerToken}`,
     },
     payload: {
-      courseCode: `SE-${Math.floor(4700 + Math.random() * 200)}`,
+      courseCode: feedbackThreadCourseCode,
       courseName: '反馈修改课程',
       teacherId: 'teacher-demo-001',
       semester: '2026 春',
@@ -559,7 +561,7 @@ describe('feedback threads', () => {
             id: feedbackId,
             courseId,
             courseName: '反馈修改课程',
-            courseCode: expect.stringMatching(/^SE-/),
+            courseCode: feedbackThreadCourseCode,
             assignmentId,
             assignmentTitle: '反馈修改作业',
             submissionId,
@@ -586,8 +588,40 @@ describe('feedback threads', () => {
     })
   })
 
+  it('normalizes feedback thread status filters and rejects unknown statuses', async () => {
+    const { app, teacherToken, courseId, feedbackId } = await createFeedbackThread()
+
+    const uppercaseResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}&status=OPEN`,
+      headers: {
+        authorization: `Bearer ${teacherToken}`,
+      },
+    })
+    const invalidResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}&status=archived`,
+      headers: {
+        authorization: `Bearer ${teacherToken}`,
+      },
+    })
+
+    expect(uppercaseResponse.statusCode).toBe(200)
+    expect(uppercaseResponse.json().data.items).toEqual([
+      expect.objectContaining({ id: feedbackId, status: 'open' }),
+    ])
+    expect(invalidResponse.statusCode).toBe(400)
+    expect(invalidResponse.json()).toMatchObject({
+      success: false,
+      message: 'invalid_feedback_status',
+      error: {
+        code: 'INVALID_FEEDBACK_STATUS',
+      },
+    })
+  })
+
   it('limits feedback thread overview to the current actor scope', async () => {
-    const { app, teacherToken, studentToken, officerToken, courseId, feedbackId } =
+    const { app, teacherToken, studentToken, officerToken, courseId, assignmentId, feedbackId } =
       await createFeedbackThread()
     const otherTeacherToken = app.jwt.sign({
       sub: 'teacher-not-owner',
@@ -607,6 +641,20 @@ describe('feedback threads', () => {
       url: `/api/v1/feedbacks/threads?courseId=${courseId}`,
       headers: {
         authorization: `Bearer ${otherTeacherToken}`,
+      },
+    })
+    const otherTeacherAssignmentResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?assignmentId=${assignmentId}`,
+      headers: {
+        authorization: `Bearer ${otherTeacherToken}`,
+      },
+    })
+    const missingAssignmentResponse = await app.inject({
+      method: 'GET',
+      url: '/api/v1/feedbacks/threads?assignmentId=missing-assignment',
+      headers: {
+        authorization: `Bearer ${teacherToken}`,
       },
     })
     const studentResponse = await app.inject({
@@ -630,6 +678,10 @@ describe('feedback threads', () => {
     ])
     expect(otherTeacherResponse.statusCode).toBe(200)
     expect(otherTeacherResponse.json().data.items).toEqual([])
+    expect(otherTeacherAssignmentResponse.statusCode).toBe(200)
+    expect(otherTeacherAssignmentResponse.json().data.items).toEqual([])
+    expect(missingAssignmentResponse.statusCode).toBe(200)
+    expect(missingAssignmentResponse.json().data.items).toEqual([])
     expect(studentResponse.statusCode).toBe(200)
     expect(studentResponse.json().data.items).toEqual([
       expect.objectContaining({ id: feedbackId }),
