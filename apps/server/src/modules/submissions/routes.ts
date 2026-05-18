@@ -20,6 +20,8 @@ type SubmissionDetailRow = {
   id: string
   assignment_id: string
   student_id: string
+  student_name: string | null
+  student_no: string | null
   content: string
   status: string
   score: number | null
@@ -38,6 +40,8 @@ function toSubmission(row: SubmissionDetailRow) {
     id: row.id,
     assignmentId: row.assignment_id,
     studentId: row.student_id,
+    studentName: row.student_name,
+    studentNo: row.student_no,
     content: row.content,
     status: row.status,
     score: row.score,
@@ -57,6 +61,8 @@ function getSubmissionDetail(database: DatabaseSync, submissionId: string) {
           submissions.id,
           submissions.assignment_id,
           submissions.student_id,
+          students.real_name AS student_name,
+          students.student_no,
           submissions.content,
           submissions.status,
           submissions.score,
@@ -70,6 +76,7 @@ function getSubmissionDetail(database: DatabaseSync, submissionId: string) {
           assignments.status AS assignment_status
         FROM submissions
         INNER JOIN assignments ON assignments.id = submissions.assignment_id
+        INNER JOIN users AS students ON students.id = submissions.student_id
         WHERE submissions.id = ?
         LIMIT 1
       `,
@@ -109,17 +116,29 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
       .prepare(
         `
           SELECT
-            id, assignment_id, student_id, content, status, score, teacher_feedback,
-            submitted_at, graded_at
+            submissions.id,
+            submissions.assignment_id,
+            submissions.student_id,
+            students.real_name AS student_name,
+            students.student_no,
+            submissions.content,
+            submissions.status,
+            submissions.score,
+            submissions.teacher_feedback,
+            submissions.submitted_at,
+            submissions.graded_at
           FROM submissions
-          WHERE assignment_id = ?
-          ORDER BY submitted_at DESC
+          INNER JOIN users AS students ON students.id = submissions.student_id
+          WHERE submissions.assignment_id = ?
+          ORDER BY submissions.submitted_at IS NULL, submissions.submitted_at DESC
         `,
       )
       .all(params.assignmentId) as Array<{
       id: string
       assignment_id: string
       student_id: string
+      student_name: string | null
+      student_no: string | null
       content: string
       status: string
       score: number | null
@@ -136,6 +155,8 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
           id: item.id,
           assignmentId: item.assignment_id,
           studentId: item.student_id,
+          studentName: item.student_name,
+          studentNo: item.student_no,
           content: item.content,
           status: item.status,
           score: item.score,

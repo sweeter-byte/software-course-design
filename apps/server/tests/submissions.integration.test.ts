@@ -390,6 +390,8 @@ describe('assignment submissions', () => {
             assignmentId,
             status: 'submitted',
             content: '这是提交清单里的答案。',
+            studentName: '提交学生',
+            studentNo: '162350120',
           }),
         ],
       },
@@ -397,6 +399,148 @@ describe('assignment submissions', () => {
         requestId: expect.any(String),
       },
     })
+  })
+
+  it('returns student names and student numbers for each submission in the listing', async () => {
+    const { app, officerToken, teacherToken, studentToken } = await buildLearningApp()
+
+    const courseResponse = await app.inject({
+      method: 'POST',
+      url: '/api/v1/courses',
+      headers: {
+        authorization: `Bearer ${officerToken}`,
+      },
+      payload: {
+        courseCode: 'SE-4404',
+        courseName: '多学生提交清单',
+        teacherId: 'teacher-demo-001',
+        semester: '2026 春',
+        description: '验证多学生提交时教师能看到姓名/学号。',
+        location: '将军路校区 A210',
+        scheduleText: '周一 14:00-15:35',
+        capacity: 100,
+        startDate: '2026-03-01',
+        endDate: '2026-07-01',
+      },
+    })
+    const courseId = courseResponse.json().data.course.id as string
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/courses/${courseId}/enroll`,
+      headers: {
+        authorization: `Bearer ${studentToken}`,
+      },
+    })
+
+    const secondPhone = '13800138021'
+    const secondVerification = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/verification-code',
+      payload: {
+        phone: secondPhone,
+        purpose: 'register',
+      },
+    })
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register/student',
+      payload: {
+        phone: secondPhone,
+        password: 'Password123!',
+        confirmPassword: 'Password123!',
+        username: 'submission_student_2',
+        realName: '另一位提交学生',
+        studentId: '162350121',
+        verificationCode: secondVerification.json().data.previewCode,
+      },
+    })
+
+    const secondLogin = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/login',
+      payload: {
+        phone: secondPhone,
+        password: 'Password123!',
+      },
+    })
+    const secondToken = secondLogin.json().data.accessToken as string
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/courses/${courseId}/enroll`,
+      headers: {
+        authorization: `Bearer ${secondToken}`,
+      },
+    })
+
+    const assignmentResponse = await app.inject({
+      method: 'POST',
+      url: `/api/v1/courses/${courseId}/assignments`,
+      headers: {
+        authorization: `Bearer ${teacherToken}`,
+      },
+      payload: {
+        title: '多学生提交作业',
+        description: '验证清单姓名/学号。',
+        requirement: '提交一段答案。',
+        startAt: relativeIsoDate(-7, 8),
+        dueAt: relativeIsoDate(30),
+      },
+    })
+    const assignmentId = assignmentResponse.json().data.assignment.id as string
+
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/assignments/${assignmentId}/submissions`,
+      headers: {
+        authorization: `Bearer ${studentToken}`,
+      },
+      payload: {
+        content: '提交学生的答案。',
+      },
+    })
+    await app.inject({
+      method: 'POST',
+      url: `/api/v1/assignments/${assignmentId}/submissions`,
+      headers: {
+        authorization: `Bearer ${secondToken}`,
+      },
+      payload: {
+        content: '另一位提交学生的答案。',
+      },
+    })
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/api/v1/assignments/${assignmentId}/submissions`,
+      headers: {
+        authorization: `Bearer ${teacherToken}`,
+      },
+    })
+
+    expect(response.statusCode).toBe(200)
+    const items = response.json().data.items as Array<{
+      studentName: string | null
+      studentNo: string | null
+      content: string
+    }>
+    expect(items).toHaveLength(2)
+
+    const byName = new Map(items.map((item) => [item.studentName, item]))
+    expect(byName.get('提交学生')).toMatchObject({
+      studentNo: '162350120',
+      content: '提交学生的答案。',
+    })
+    expect(byName.get('另一位提交学生')).toMatchObject({
+      studentNo: '162350121',
+      content: '另一位提交学生的答案。',
+    })
+    for (const item of items) {
+      expect(item.studentName).not.toBeNull()
+      expect(item.studentNo).not.toBeNull()
+    }
   })
 
   it('allows a student to view their own submission and grading result', async () => {
@@ -432,6 +576,8 @@ describe('assignment submissions', () => {
           status: 'graded',
           score: 88,
           teacherFeedback: '答案完整，可以继续完善论证。',
+          studentName: '提交学生',
+          studentNo: '162350120',
         },
       },
     })

@@ -588,6 +588,137 @@ describe('feedback threads', () => {
     })
   })
 
+  it('paginates feedback thread overview with default and clamped limit', async () => {
+    const { app, teacherToken, studentToken, officerToken, courseId, assignmentId } =
+      await createFeedbackThread()
+
+    for (let index = 0; index < 3; index += 1) {
+      const phone = `1380013900${index}`
+      const verificationResponse = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/verification-code',
+        payload: {
+          phone,
+          purpose: 'register',
+        },
+      })
+      const verificationPayload = verificationResponse.json()
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/register/student',
+        payload: {
+          phone,
+          password: 'Password123!',
+          confirmPassword: 'Password123!',
+          username: `pagination_student_${index}`,
+          realName: `分页学生${index}`,
+          studentId: `S2026013${index}`,
+          verificationCode: verificationPayload.data.previewCode,
+        },
+      })
+
+      const extraLogin = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/login',
+        payload: {
+          phone,
+          password: 'Password123!',
+        },
+      })
+      const extraToken = extraLogin.json().data.accessToken as string
+
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/courses/${courseId}/enroll`,
+        headers: {
+          authorization: `Bearer ${extraToken}`,
+        },
+      })
+
+      const submissionResponse = await app.inject({
+        method: 'POST',
+        url: `/api/v1/assignments/${assignmentId}/submissions`,
+        headers: {
+          authorization: `Bearer ${extraToken}`,
+        },
+        payload: {
+          content: `第 ${index} 位学生的提交内容。`,
+        },
+      })
+      const extraSubmissionId = submissionResponse.json().data.submission.id as string
+
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/submissions/${extraSubmissionId}/grade`,
+        headers: {
+          authorization: `Bearer ${teacherToken}`,
+        },
+        payload: {
+          score: 80 + index,
+          teacherFeedback: '已批改。',
+        },
+      })
+
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/submissions/${extraSubmissionId}/feedbacks`,
+        headers: {
+          authorization: `Bearer ${extraToken}`,
+        },
+        payload: {
+          kind: 'question',
+          content: `第 ${index} 位学生的反馈内容。`,
+        },
+      })
+    }
+
+    const limitedResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}&limit=2`,
+      headers: {
+        authorization: `Bearer ${officerToken}`,
+      },
+    })
+
+    const limitedPayload = limitedResponse.json()
+    expect(limitedResponse.statusCode).toBe(200)
+    expect(limitedPayload.data.items).toHaveLength(2)
+    expect(limitedPayload.data.pagination).toEqual({ limit: 2, offset: 0, count: 2 })
+
+    const offsetResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}&limit=2&offset=2`,
+      headers: {
+        authorization: `Bearer ${officerToken}`,
+      },
+    })
+    const offsetPayload = offsetResponse.json()
+    expect(offsetResponse.statusCode).toBe(200)
+    expect(offsetPayload.data.pagination).toEqual({ limit: 2, offset: 2, count: 2 })
+
+    const overflowResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}&limit=500`,
+      headers: {
+        authorization: `Bearer ${officerToken}`,
+      },
+    })
+    const overflowPayload = overflowResponse.json()
+    expect(overflowResponse.statusCode).toBe(200)
+    expect(overflowPayload.data.pagination.limit).toBe(200)
+
+    const invalidLimitResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/feedbacks/threads?courseId=${courseId}&limit=not-a-number`,
+      headers: {
+        authorization: `Bearer ${studentToken}`,
+      },
+    })
+    expect(invalidLimitResponse.statusCode).toBe(200)
+    expect(invalidLimitResponse.json().data.pagination.limit).toBe(100)
+  })
+
   it('normalizes feedback thread status filters and rejects unknown statuses', async () => {
     const { app, teacherToken, courseId, feedbackId } = await createFeedbackThread()
 

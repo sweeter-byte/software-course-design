@@ -97,6 +97,31 @@ function toFeedbackThread(row: FeedbackThreadRow, responses: FeedbackResponseRow
   }
 }
 
+const FEEDBACK_THREADS_DEFAULT_LIMIT = 100
+const FEEDBACK_THREADS_MAX_LIMIT = 200
+
+function parseBoundedInteger(raw: string | undefined, fallback: number, min: number, max: number) {
+  if (raw === undefined || raw === '') {
+    return fallback
+  }
+
+  const parsed = Number(raw)
+
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return fallback
+  }
+
+  if (parsed < min) {
+    return min
+  }
+
+  if (parsed > max) {
+    return max
+  }
+
+  return parsed
+}
+
 function getFeedbackById(database: DatabaseSync, feedbackId: string) {
   return database
     .prepare(
@@ -117,9 +142,11 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
       courseId?: string
       assignmentId?: string
       status?: string
+      limit?: string
+      offset?: string
     }
     const filters: string[] = []
-    const values: string[] = []
+    const values: (string | number)[] = []
     const status = query.status?.trim().toLowerCase()
 
     if (status) {
@@ -150,6 +177,14 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
       values.push(actor.sub)
     }
 
+    const limit = parseBoundedInteger(
+      query.limit,
+      FEEDBACK_THREADS_DEFAULT_LIMIT,
+      1,
+      FEEDBACK_THREADS_MAX_LIMIT,
+    )
+    const offset = parseBoundedInteger(query.offset, 0, 0, Number.MAX_SAFE_INTEGER)
+
     const feedbacks = context.database
       .prepare(
         `
@@ -179,9 +214,10 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
           INNER JOIN users AS students ON students.id = feedbacks.student_id
           WHERE ${filters.join(' AND ')}
           ORDER BY feedbacks.created_at DESC
+          LIMIT ? OFFSET ?
         `,
       )
-      .all(...values) as FeedbackThreadRow[]
+      .all(...values, limit, offset) as FeedbackThreadRow[]
 
     const responses =
       feedbacks.length > 0
@@ -211,6 +247,11 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
       message: 'ok',
       data: {
         items: feedbacks.map((feedback) => toFeedbackThread(feedback, responses)),
+        pagination: {
+          limit,
+          offset,
+          count: feedbacks.length,
+        },
       },
       meta: {
         requestId: request.id,
