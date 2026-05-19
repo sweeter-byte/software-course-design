@@ -22,6 +22,7 @@ import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
 import { readInitialRuntimeState } from './runtime-state'
+import { confirmDestructive } from './utils/confirm'
 import { formatDateTimeForDisplay, fromDateTimeLocalValue, toDateTimeLocalValue } from './utils/date'
 import { friendlyErrorMessage } from './utils/errors'
 
@@ -1168,7 +1169,11 @@ function App() {
                   onPhoneChange={setPhoneDraft}
                   onSubmitProfile={() => updateProfileMutation.mutate()}
                   onSubmitPassword={() => changePasswordMutation.mutate()}
-                  onCancelAccount={() => cancelAccountMutation.mutate()}
+                  onCancelAccount={() => {
+                    if (confirmDestructive('确认注销当前账号吗？注销后将立即退出登录，且无法恢复。')) {
+                      cancelAccountMutation.mutate()
+                    }
+                  }}
                   onRequestPhoneCode={(target) => phoneCodeMutation.mutate(target)}
                   onSubmitPhoneChange={() => changePhoneMutation.mutate()}
                 />
@@ -1407,7 +1412,7 @@ function App() {
                         type="button"
                         disabled={!selectedCourse || updateCourseMutation.isPending}
                         onClick={() => {
-                          if (window.confirm('确认修改当前课程信息吗？')) {
+                          if (confirmDestructive('确认修改当前课程信息吗？')) {
                             updateCourseMutation.mutate()
                           }
                         }}
@@ -1419,7 +1424,7 @@ function App() {
                         type="button"
                         disabled={!selectedCourse || deleteCourseMutation.isPending}
                         onClick={() => {
-                          if (window.confirm('确认删除当前课程及其关联数据吗？')) {
+                          if (confirmDestructive('确认删除当前课程及其关联数据吗？')) {
                             deleteCourseMutation.mutate()
                           }
                         }}
@@ -1583,7 +1588,7 @@ function App() {
                           type="button"
                           disabled={!selectedAssignment || cancelAssignmentMutation.isPending}
                           onClick={() => {
-                            if (window.confirm('确认取消当前作业并清除相关提交记录吗？')) {
+                            if (confirmDestructive('确认取消当前作业并清除相关提交记录吗？')) {
                               cancelAssignmentMutation.mutate()
                             }
                           }}
@@ -1699,7 +1704,11 @@ function App() {
                             <button
                               className="danger-button"
                               type="button"
-                              onClick={() => deleteCourseFeedbackMutation.mutate(feedback.id)}
+                              onClick={() => {
+                                if (confirmDestructive('确认删除该课程反馈吗？删除后无法恢复。')) {
+                                  deleteCourseFeedbackMutation.mutate(feedback.id)
+                                }
+                              }}
                               disabled={deleteCourseFeedbackMutation.isPending}
                             >
                               删除反馈
@@ -1934,7 +1943,11 @@ function App() {
                                   className="danger-button"
                                   type="button"
                                   disabled={deleteResponseMutation.isPending}
-                                  onClick={() => deleteResponseMutation.mutate(response.id)}
+                                  onClick={() => {
+                                    if (confirmDestructive('确认删除该回复吗？删除后无法恢复。')) {
+                                      deleteResponseMutation.mutate(response.id)
+                                    }
+                                  }}
                                 >
                                   删除回复
                                 </button>
@@ -1969,7 +1982,11 @@ function App() {
                               className="danger-button"
                               type="button"
                               disabled={deleteFeedbackMutation.isPending}
-                              onClick={() => deleteFeedbackMutation.mutate(feedback.id)}
+                              onClick={() => {
+                                if (confirmDestructive('确认删除该问题/反馈吗？删除后无法恢复。')) {
+                                  deleteFeedbackMutation.mutate(feedback.id)
+                                }
+                              }}
                             >
                               删除问题/反馈
                             </button>
