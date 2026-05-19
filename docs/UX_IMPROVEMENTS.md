@@ -4,7 +4,7 @@
 
 - **P0** — 已完成（截至 2026-05-19）。已并入 `main` 分支。
 - **P1** — 已全部完成（截至 2026-05-19，P1-4 / P1-5 / P1-6 / P1-7）。
-- **P2** — 进行中：P2-8（路由骨架）已完成；P2-9 / P2-10 待办。
+- **P2** — 进行中：P2-8（路由骨架）与 P2-9（移动端抽屉）已完成；P2-10 待办。
 
 用途：
 1. 新会话延续工作时，可直接基于本文件查阅已完成与待办。
@@ -15,8 +15,8 @@
 ## 当前基线（参考点）
 
 - 分支：`main`
-- 最近提交：`1b00a94 feat(web): drive workspace view from URL via React Router`（前置：`a98c990 feat(officer): add user administration (list + enable/disable)`）
-- 测试状态：后端 vitest 52 通过 / 11 文件；Web vitest 64 通过 / 15 文件（P2-8 未新增前端单测，浏览器路由由 vite build + dev-server URL 冒烟覆盖）；`npm run typecheck` 全绿；`npm run lint` 全绿；`npm run build --workspace @course/web` 通过。
+- 最近提交：`34e3090 feat(web): collapse mobile sidebar into a drawer`（前置：`1b00a94 feat(web): drive workspace view from URL via React Router`）
+- 测试状态：后端 vitest 52 通过 / 11 文件；Web vitest 73 通过 / 17 文件（P2-9 新增 `useMediaQuery` 与 `SidebarDrawer` 共 2 个测试文件 / 9 个用例）；`npm run typecheck` 全绿；`npm run lint` 全绿；`npm run build --workspace @course/web` 通过（gzip JS 104.86 kB，较 P2-8 基线 +0.7 kB）。
 - 关键命令（沿用 `CLAUDE.md`）：
   ```bash
   npm run dev                # server + web together
@@ -123,6 +123,20 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## P2 · 已完成
 
+### P2-9 · 移动端响应式：侧栏改抽屉
+
+| 项 | 内容 |
+| --- | --- |
+| 提交 | `34e3090 feat(web): collapse mobile sidebar into a drawer` |
+| 背景 | 旧 `@media (max-width: 840px)` 仅把 `.brand-rail` 改为 `position: relative` 并把侧栏 `.sidebar-nav` 改成两列网格、隐藏小标题与 `sidebar-guide`，整列仍占据顶部一整屏宽度；在 360–414px 视窗下主区域被挤到第二屏，操作体验差。 |
+| 范围 | 仅做「移动端抽屉 + 表单字号」一步：在 `< 840px` 时彻底不渲染内联侧栏，改由「workspace-head 内的汉堡按钮 → 受控抽屉」托管导航；同时把 `<input/textarea/select>` 的最小字号提到 16px（避开 iOS 自动缩放），最小高度 46px / 132px。不改桌面端布局，亦不改任何已上线的页面/导航逻辑。 |
+| 前端改动 | 新增 `apps/web/src/hooks/useMediaQuery.ts`：基于 `useSyncExternalStore` 订阅 `window.matchMedia` 的 `change` 事件，SSR/jsdom 无 `matchMedia` 时返回 `false`；用 `useSyncExternalStore` 而非 `useState + useEffect`，避开 React 19 的 `react-hooks/set-state-in-effect` 规则。新增 `apps/web/src/components/layout/SidebarDrawer.tsx`：受控抽屉，`isOpen=false` 时返回 `null`；打开时渲染半透明遮罩 `<button>` + `<aside role="dialog" aria-modal="true">` 面板（panel 同时挂 `.brand-rail .app-sidebar` 以复用既有侧栏样式），监听 `keydown` 上的 Esc 调用 `onClose`，并在 mount/unmount 时锁定/恢复 `document.body.style.overflow`。`apps/web/src/App.tsx`：登录后视图新增 `isMobileNavOpen` state、`isCompactViewport = useMediaQuery('(max-width: 840px)')`、`isDrawerOpen = isCompactViewport && isMobileNavOpen`；把原 `<aside className="brand-rail app-sidebar">` 内的 brand / nav / footer / guide 抽出为 `sidebarBody` JSX，桌面端原位渲染，移动端通过 `<SidebarDrawer isOpen onClose>` 包裹；侧栏导航按钮 `onClick` 在 compact 模式下同步 `setIsMobileNavOpen(false)`，点导航后自动关抽屉；`workspace-head` 顶部条件渲染汉堡按钮 `<button className="hamburger-button" aria-expanded={isDrawerOpen} aria-controls="sidebar-drawer">`。`apps/web/src/App.css`：① 把原 `@media (max-width: 840px)` 内仅作用于「占满顶部的旧侧栏」的 `.brand-rail / .app-sidebar / .sidebar-brand / .sidebar-nav / .nav-item / .nav-icon / .nav-item small / .sidebar-guide / .sidebar-footer` 全部删除（移动端不再渲染内联侧栏，那些规则反而会把 drawer 的 `.brand-rail` 子节点变成 `position: relative`）；② 移动端新增 `.page-shell-compact { grid-template-columns: minmax(0, 1fr); }`，因此 main 内容占满；③ 移动端把 `input/textarea/select` 提到 `font-size: 16px; min-height: 46px;`、textarea 132px；④ 新增 `.hamburger-button` 与 `.hamburger-bars`（40×40 方形按钮，三横条）；⑤ 新增 `.sidebar-drawer`（`position: fixed; inset: 0; z-index: 40;`）、`.sidebar-drawer-overlay`（半透明遮罩，`<button>` 形式）与 `.sidebar-drawer-panel.brand-rail`（`width: min(82vw, 320px); overflow-y: auto;` + `sidebar-drawer-slide-in` 180ms 进入动画）。 |
+| URL / 状态 | 抽屉状态完全本地化（`isMobileNavOpen`），不进入 URL；视口跨越 840px 阈值时不主动重置 state——通过派生 `isDrawerOpen = isCompactViewport && isMobileNavOpen` 自然隐藏在桌面端，无需 `useEffect` 调 `setState`（同样为避开 `react-hooks/set-state-in-effect`）。Esc / 点遮罩 / 点导航项三条路径均 `setIsMobileNavOpen(false)`。 |
+| 文档 | 本文件（基线提交 / 测试计数 / P2 状态 / 速查段）。 |
+| 测试 | 新增 `apps/web/src/hooks/useMediaQuery.test.ts` 3 用例（初始值取自 `matchMedia` / `change` 事件触发更新 / unmount 时 `removeEventListener`，通过 mock `window.matchMedia` 并断言 `addEventListener` / `removeEventListener` 调用次数）。新增 `apps/web/src/components/layout/SidebarDrawer.test.tsx` 6 用例（关闭时不渲染 / 打开时 `role="dialog"` + `aria-modal=true` + 子节点可见 / 点遮罩按钮调 `onClose` / 按 Esc 调 `onClose` / 关闭时不响应 Esc / 开闭切换 `document.body.style.overflow`）。`npm run test` 全绿（后端 52/11；Web 73/17；dev-runtime parser 通过）；`npm run typecheck` / `npm run lint` 全绿。`vite build` 通过（gzip JS 104.86 kB，较 P2-8 基线 104.13 kB +0.7 kB）。 |
+| 偏离 | 路线图建议 ① `useMediaQuery('(max-width: 840px)')` 自建 hook；② 焦点 trap 可选；③ hamburger 按钮放在「顶部 hero 上方」。本次实现：① hook 选用 `useSyncExternalStore` 而非 `useState + useEffect`，因 React 19 的 `react-hooks/set-state-in-effect` 规则禁止在 effect 中同步 `setState`；功能等价。② 未做焦点 trap：抽屉打开后 Tab 仍可移到 main 区域，但 Esc / 遮罩 / 点导航三条路径都能关闭，对单页 SPA 演示场景足够；后续若做完整 a11y 审查再补 `react-focus-lock` 或自建。③ 汉堡按钮放在 `.workspace-head` 内部最左侧（与标题同行），而非 hero 上方——因 `.workspace-head` 才是移动端 sticky 元素，在 hero 上方放按钮会被滚出视野；放在 head 里既保持单行布局也保证滚动后仍可触达。 |
+| 验收准则 | 1. 在 360–414px 视窗下，登录后首屏仅显示 `.workspace-head` + 内容卡片，无任何侧栏占位；2. 点汉堡按钮抽屉从左滑入，遮罩可点关闭；3. 按 Esc 关抽屉；4. 选任意导航项后自动关抽屉并跳到对应路由；5. 抽屉打开期间 `body` 不可滚动，关闭后恢复；6. ≥ 841px 桌面端布局与 P2-8 完全一致（仍是双列 grid，侧栏内联渲染，无汉堡按钮）；7. 现有 73 个 web vitest / 52 个 server vitest 全部通过；`npm run typecheck` / `npm run lint` / `vite build` 通过。 |
+
 ### P2-8 · 引入 React Router（路由骨架）
 
 | 项 | 内容 |
@@ -143,16 +157,6 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 ## P2 · 待办（架构与可扩展性）
 
 > P2 改动跨度较大，建议各自独立分支 + PR；完成前可与本文件 P0/P1 解耦推进。
-
-### P2-9 · 移动端响应式：侧栏改抽屉
-
-| 项 | 内容 |
-| --- | --- |
-| 现状 | `apps/web/src/App.css` 仅在 `1180px` 与 `840px` 两条媒体查询做基本两列 → 单列调整；小屏（手机）侧栏（`.app-sidebar`）依然横向占满，挤压主内容。 |
-| 目标 | 在 `< 840px` 时侧栏改为抽屉（hamburger 触发），主区域占满；表单 `<input>` 字号增大。 |
-| 建议实施 | 1. 新增 `apps/web/src/components/layout/SidebarDrawer.tsx`：受控的抽屉组件（`isOpen` + `onClose`，点击遮罩关闭，Esc 关闭，焦点 trap 可选）；2. 在 `App.tsx` 中根据 `useMediaQuery('(max-width: 840px)')`（自建 hook 或简单 `matchMedia`）切换渲染模式；3. CSS 在 `App.css` 增加 `.sidebar-drawer` 类，控制位置/动画；4. hamburger 按钮放在顶部 hero 上方。 |
-| 验收准则 | 在 360–414px 视窗下可流畅操作；抽屉打开时遮罩 dismissable；不影响桌面端布局。 |
-| 风险 | P2-8 拆路由完成后再做更顺；如先做需注意状态在 sidebar 与 drawer 间一致。 |
 
 ### P2-10 · 按路由条件渲染替换 `view-hidden`
 
@@ -186,4 +190,6 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
   - 文档：`docs/API_SPEC.md`、`docs/REQUIREMENTS_TRACEABILITY.md`
 - P2-8 涉及文件：
   - 前端：`apps/web/src/main.tsx`、`apps/web/src/App.tsx`（`apps/web/vite.config.ts` 探索过 dedupe，但因 `react-router-dom` 子路径导入而回退，未改动）
-- P2-9 / P2-10 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
+- P2-9 涉及文件：
+  - 前端：`apps/web/src/hooks/useMediaQuery.ts`、`apps/web/src/hooks/useMediaQuery.test.ts`、`apps/web/src/components/layout/SidebarDrawer.tsx`、`apps/web/src/components/layout/SidebarDrawer.test.tsx`、`apps/web/src/App.tsx`、`apps/web/src/App.css`
+- P2-10 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
