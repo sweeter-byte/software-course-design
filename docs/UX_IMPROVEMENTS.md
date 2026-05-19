@@ -3,7 +3,7 @@
 本文档记录针对系统验收期的可用性 / 完整性改进项，按优先级分为 P0 / P1 / P2 三个梯队：
 
 - **P0** — 已完成（截至 2026-05-19）。已并入 `main` 分支。
-- **P1** — 部分完成。P1-4 / P1-5 / P1-6 已完成（2026-05-19），P1-7 待办。
+- **P1** — 已全部完成（截至 2026-05-19，P1-4 / P1-5 / P1-6 / P1-7）。
 - **P2** — 待办，架构与可扩展性优化。
 
 用途：
@@ -15,8 +15,8 @@
 ## 当前基线（参考点）
 
 - 分支：`main`
-- 最近提交：`ebb56e5 feat(web): add HTML5 native validation to forms`（前置：`3f3c1b6 docs: record P1-5 destructive confirmation commit in UX tracker`）
-- 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 64 通过 / 15 文件（含 P1-4 新增的 `useNotifications` 8 用例与 P1-5 新增的 `confirmDestructive` 3 用例；P1-6 未新增专项测试，原有 15 个测试文件覆盖了带新增 `required` / `minLength` 的提交路径）；`npm run typecheck` 全绿；`npm run lint` 全绿。
+- 最近提交：`a98c990 feat(officer): add user administration (list + enable/disable)`（前置：`e543fc3 docs: record P1-6 HTML5 form validation commit in UX tracker`）
+- 测试状态：后端 vitest 52 通过 / 11 文件（含 P1-7 新增的 `users-admin.integration.test.ts` 4 用例）；Web vitest 64 通过 / 15 文件（P1-7 未新增前端单测，新组件 `UserAdminSection` 走人工 / 集成验收）；`npm run typecheck` 全绿；`npm run lint` 全绿。
 - 关键命令（沿用 `CLAUDE.md`）：
   ```bash
   npm run dev                # server + web together
@@ -71,6 +71,19 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## P1 · 已完成
 
+### P1-7 · 教务员补「用户管理」最小集
+
+| 项 | 内容 |
+| --- | --- |
+| 提交 | `a98c990 feat(officer): add user administration (list + enable/disable)` |
+| 背景 | `docs/PROJECT_SUMMARY.md` 与 `RQ-GOV-01` 要求教务员「统筹账号与课程运行」，但教务员侧栏只有课程与反馈入口，没有用户管理；后端虽然 `users.status` 已包含 `'active' / 'cancelled' / 'disabled'` 三态，登录路径却把所有非 `active` 一律按 `INVALID_CREDENTIALS` 拦截，无法区分「被禁用」。 |
+| 后端改动 | `apps/server/src/modules/auth/routes.ts`：拆分登录的拒绝原因——`status === 'cancelled'` 或手机号不存在仍归 `401 INVALID_CREDENTIALS`（不向调用方暴露注销账号是否存在），密码错误也归 `401`；只有密码校验通过且 `status === 'disabled'` 才返回 `403 ACCOUNT_DISABLED`，避免被作为账号探测渠道。`apps/server/src/modules/users/routes.ts`：复用现有 `requireRole(['officer'])`，新增 `GET /` 列表（可选 `role` 过滤，按 `created_at ASC`）与 `PATCH /:userId/status`（body `{disabled: boolean}`），禁用时清理目标账号的 `auth_sessions`，恢复时不重发 token；显式拦截 `params.userId === actor.sub`（`400 CANNOT_MODIFY_SELF`）和 `cancelled` 账号（`409 ACCOUNT_CANCELLED`）。`packages/shared/src/index.ts` 新增 `userListQuerySchema` / `userStatusUpdateSchema`。schema 复用原有 `users.status` CHECK，无 migration 需要。 |
+| 前端改动 | `apps/web/src/api.ts` 加 `listAdminUsers` / `setUserDisabled`。`apps/web/src/domain.ts` 新增 `AdminUserItem` 类型。`apps/web/src/features/officer/UserAdminSection.tsx` 渲染列表（状态徽章 `正常 / 已禁用 / 已注销` + 角色徽章）与启停按钮（带 `confirmDestructive` 二次确认，文案区分禁用 / 恢复）；自己 / 已注销账号按钮置灰并附说明。`apps/web/src/App.tsx`：`WorkspaceView` 增加 `'userAdmin'`，`roleNavigation.officer` 新增对应入口，注入 `adminUsersQuery`（role 过滤变化时自动重取）和 `toggleUserStatusMutation`（用 `setUserAdminPendingId` 在 mutation 期间锁定按钮），新视图在 SectionCard 内挂载 `<UserAdminSection />`。`apps/web/src/utils/errors.ts` 把 `account_disabled / account_cancelled / cannot_modify_self / user_not_found` 映射成中文 toast。`apps/web/src/App.css` 增加 `.status-tag.status-disabled` / `.status-tag.status-cancelled` 与 `.user-admin*` 样式。 |
+| 文档 | `docs/API_SPEC.md`：在 `/auth/login` 错误码段补 `ACCOUNT_DISABLED`，并把 `/users` 段从「占位描述」改为实际签名（`role` 过滤、`PATCH /:userId/status`、限制与错误码）。`docs/REQUIREMENTS_TRACEABILITY.md`：新增 `RQ-GOV-02`。本文件（基线提交 / 测试计数 / P1 状态 / 速查段）。 |
+| 测试 | `apps/server/tests/users-admin.integration.test.ts` 4 用例（列表 + role 过滤 / 非教务员 403 / 禁用 → 登录被 `ACCOUNT_DISABLED` 阻断 → 错误密码仍报 `INVALID_CREDENTIALS` → 恢复后可再次登录 / 不允许禁用自己 `CANNOT_MODIFY_SELF`）。Web 端未加新单测：`UserAdminSection` 为薄壳渲染，状态切换由 React Query / mutation 驱动，已被后端集成测试覆盖。`npm run test` 全绿（后端 52/11；Web 64/15；dev-runtime parser 测试通过）；`npm run typecheck` / `npm run lint` 全绿。 |
+| 偏离 | 路线图建议新增 `is_disabled INTEGER NOT NULL DEFAULT 0`，但 `schema.ts` 中 `users.status` 早就支持 `'disabled'`（与 `'cancelled'` 区分），直接复用更省一次 migration，也避免两个布尔含义重叠。`/users` 列表的 `role` 过滤参数实现了，但路线图提到的 `keyword / status / page / pageSize` 暂未做——`API_SPEC.md` 旧版描述里那几个参数从未实现，本次改成与代码一致；后续若要支持分页可在不破坏既有调用方的前提下扩展。`/me` 与其他业务路由对 `disabled` 用户的 JWT 仍然有效（无 access token 过期），仅 `/me` 在 status 非 `active` 时返回 404，依赖 web 客户端自动登出；这是 P1 范围之外的安全增强，可在 P2 一并处理。 |
+| 验收准则 | 1. 教务员侧栏出现「用户管理」入口；进入后看到教师 / 学生 / 教务员三类账号，可按角色筛选。2. 点「禁用」二次确认后，被禁账号再次登录返回 `403 ACCOUNT_DISABLED` 并在 web 通知条提示「账号已被教务员禁用…」。3. 同一账号输入错误密码仍返回 `401 INVALID_CREDENTIALS`，不会泄漏其禁用状态。4. 点「恢复」后该账号立即可再次登录。5. 教务员点自己一行的按钮：按钮已置灰且尝试提交 PATCH 返回 `400 CANNOT_MODIFY_SELF`。 |
+
 ### P1-6 · 表单加 HTML5 原生校验
 
 | 项 | 内容 |
@@ -105,22 +118,6 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 | 测试 | `apps/web/src/hooks/useNotifications.test.ts` 新增 8 用例（初始为空 / notify 入队 / 多条堆叠且 id 唯一 / dismiss 移除 / 默认 TTL 自动消失 / error TTL 更长 / `ttl: null` 常驻 / 提前 dismiss 不影响下一条计时）。`apps/web/src/features/auth/LoginShell.test.tsx` 更新为新 props（`notifications` + `onDismissNotification`）。`npm run test` 全绿（后端 48/10；Web 61/14；dev-runtime parser 测试通过）。 |
 | 偏离 | 文件目录使用 `components/notifications/` 而非建议的 `components/feedback/`，避免与领域概念「课程反馈 / 作业反馈」混淆。 |
 | 验收准则 | 连续触发两次错误（例如重复加入课程），两条都可见、能分别 dismiss；屏幕宽度 < 600px 时仍可读；每条通知有 `role="status"` 且容器 `aria-live="polite"`；登录前与登录后的通知样式一致。 |
-
----
-
-## P1 · 待办（影响体验）
-
-> P1 实施建议每项独立 commit，便于代码审核。预计每项 1–2 小时工作量。
-
-### P1-7 · 教务员补「用户管理」最小集
-
-| 项 | 内容 |
-| --- | --- |
-| 现状 | `docs/PROJECT_SUMMARY.md` 描述教务员应「统筹账号与课程运行情况」，但目前教务员侧栏没有用户列表入口，也没有禁用/启用账号的接口。 |
-| 目标 | 教务员可以查看全部用户、按角色筛选、禁用/恢复账号。先做「列表 + 启停」最小集，后续再加重置密码等。 |
-| 建议实施 | 1. 后端：`apps/server/src/lib/db/schema.ts` 给 `users` 表加 `is_disabled INTEGER NOT NULL DEFAULT 0`（CHECK 0/1）；登录路径在 `apps/server/src/modules/auth/routes.ts` 增加禁用账号阻断（`AppError('account_disabled', 403, 'ACCOUNT_DISABLED')`）。2. 新增 `apps/server/src/modules/users/routes.ts` 中：`GET /users`（教务员，支持 `role` 过滤）与 `PATCH /users/:userId/status`（教务员，body `{disabled: boolean}`）。3. 前端：`apps/web/src/App.tsx` 给 `roleNavigation.officer` 增加 `{ view: 'userAdmin', label: '用户管理', hint: '账号列表与启停' }`；新建 `apps/web/src/features/officer/UserAdminSection.tsx` 完成列表 + 切换。4. 文档：`docs/API_SPEC.md` 与 `docs/REQUIREMENTS_TRACEABILITY.md` 补充。 |
-| 验收准则 | 教务员能看到全部账号；点「禁用」后该用户登录被拒，错误码 `ACCOUNT_DISABLED` 被映射为中文文案；恢复后可再次登录；不允许禁用自己。 |
-| 风险 | 数据库 migration：schema.ts 是单一 `database.exec`，新字段加上 `DEFAULT 0` 即兼容老数据；测试库是内存库每次重建，无迁移风险，但要更新 `apps/server/src/seedDemoData.ts` 不要插入 `is_disabled` 时报错（若用 INSERT 列名列表，DEFAULT 会自动填入）。 |
 
 ---
 
@@ -162,7 +159,7 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## 给审核者的速查
 
-- P0、P1-4、P1-5 改动均带新增测试；P1-6 通过既有测试覆盖。`npm run test` 与 `npm run typecheck` 可整体验证。
+- P0、P1-4、P1-5、P1-7 改动均带新增测试；P1-6 通过既有测试覆盖。`npm run test` 与 `npm run typecheck` 可整体验证。
 - P0 涉及文件（按重要性）：
   - 后端：`apps/server/src/modules/courses/routes.ts`、`apps/server/tests/enrollments.integration.test.ts`
   - 前端：`apps/web/src/api.ts`、`apps/web/src/utils/errors.ts`、`apps/web/src/App.tsx`、`apps/web/src/domain.ts`
@@ -173,4 +170,9 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
   - 前端：`apps/web/src/utils/confirm.ts`、`apps/web/src/utils/confirm.test.ts`、`apps/web/src/App.tsx`
 - P1-6 涉及文件：
   - 前端：`apps/web/src/features/auth/{LoginForm,StudentRegisterForm,ResetPasswordForm}.tsx`、`apps/web/src/features/account/{PasswordForm,PhoneChangeForm,ProfileForm}.tsx`、`apps/web/src/features/assignments/StudentAssignmentWorkspace.tsx`、`apps/web/src/features/teacher/{TeacherTaskWorkspace,FeedbackThreadList}.tsx`、`apps/web/src/App.tsx`
-- P1-7 与 P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
+- P1-7 涉及文件：
+  - 后端：`apps/server/src/modules/auth/routes.ts`、`apps/server/src/modules/users/routes.ts`、`apps/server/tests/users-admin.integration.test.ts`
+  - 共享：`packages/shared/src/index.ts`（`userListQuerySchema` / `userStatusUpdateSchema`）
+  - 前端：`apps/web/src/features/officer/UserAdminSection.tsx`、`apps/web/src/api.ts`、`apps/web/src/domain.ts`、`apps/web/src/utils/errors.ts`、`apps/web/src/App.tsx`、`apps/web/src/App.css`
+  - 文档：`docs/API_SPEC.md`、`docs/REQUIREMENTS_TRACEABILITY.md`
+- P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
