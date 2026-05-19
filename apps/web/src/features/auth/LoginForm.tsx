@@ -29,19 +29,33 @@ export function LoginForm({
           onSubmit()
         }}
       >
-        <label>
+        <label htmlFor="login-phone">
           手机号
           <input
+            id="login-phone"
+            name="phone"
+            type="tel"
+            inputMode="numeric"
             autoComplete="username"
+            required
+            minLength={11}
+            maxLength={11}
+            pattern="\d{11}"
+            title="请输入 11 位手机号"
             value={values.phone}
             onChange={(event) => onChange({ ...values, phone: event.target.value })}
           />
         </label>
-        <label>
+        <label htmlFor="login-password">
           密码
           <input
+            id="login-password"
+            name="password"
             autoComplete="current-password"
             type="password"
+            required
+            minLength={6}
+            title="密码至少 6 位"
             value={values.password}
             onChange={(event) => onChange({ ...values, password: event.target.value })}
           />

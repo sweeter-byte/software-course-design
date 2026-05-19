@@ -1273,54 +1273,84 @@ function App() {
                     }}
                   >
                     <div className="form-grid">
-                      <label>
+                      <label htmlFor="course-code">
                         课程代码
                         <input
+                          id="course-code"
+                          name="courseCode"
+                          required
+                          minLength={2}
+                          title="请输入课程代码"
                           value={courseDraft.courseCode}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, courseCode: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="course-name">
                         课程名称
                         <input
+                          id="course-name"
+                          name="courseName"
+                          required
+                          minLength={2}
+                          title="请输入课程名称"
                           value={courseDraft.courseName}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, courseName: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="course-teacher-id">
                         授课教师编号
                         <input
+                          id="course-teacher-id"
+                          name="teacherId"
+                          required
+                          minLength={2}
+                          title="请选择授课教师"
                           value={courseDraft.teacherId}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, teacherId: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="course-semester">
                         开课学期
                         <input
+                          id="course-semester"
+                          name="semester"
+                          required
+                          minLength={2}
+                          title="请输入开课学期"
                           value={courseDraft.semester}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, semester: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="course-location">
                         授课地点
                         <input
+                          id="course-location"
+                          name="location"
+                          required
+                          minLength={2}
+                          title="请输入授课地点"
                           value={courseDraft.location}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, location: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="course-schedule">
                         上课时间
                         <input
+                          id="course-schedule"
+                          name="scheduleText"
+                          required
+                          minLength={2}
+                          title="请输入上课时间"
                           value={courseDraft.scheduleText}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, scheduleText: event.target.value }))
@@ -1328,9 +1358,14 @@ function App() {
                         />
                       </label>
                     </div>
-                    <label>
+                    <label htmlFor="course-description">
                       课程简介
                       <textarea
+                        id="course-description"
+                        name="description"
+                        required
+                        minLength={2}
+                        title="请输入课程简介"
                         value={courseDraft.description}
                         onChange={(event) =>
                           setCourseDraft((current) => ({ ...current, description: event.target.value }))
@@ -1338,36 +1373,56 @@ function App() {
                       />
                     </label>
                     <div className="form-grid">
-                      <label>
+                      <label htmlFor="course-capacity">
                         容量
                         <input
+                          id="course-capacity"
+                          name="capacity"
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          step={1}
+                          required
+                          title="课程人数上限必须为正整数"
                           value={courseDraft.capacity}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, capacity: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="course-start-date">
                         开课日期
                         <input
+                          id="course-start-date"
+                          name="startDate"
+                          type="date"
+                          required
+                          title="请选择开课日期"
                           value={courseDraft.startDate}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, startDate: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="course-end-date">
                         结课日期
                         <input
+                          id="course-end-date"
+                          name="endDate"
+                          type="date"
+                          required
+                          title="请选择结课日期"
                           value={courseDraft.endDate}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, endDate: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="course-status">
                         课程状态
                         <select
+                          id="course-status"
+                          name="status"
                           value={courseDraft.status}
                           onChange={(event) =>
                             setCourseDraft((current) => ({ ...current, status: event.target.value }))
@@ -1482,18 +1537,28 @@ function App() {
                         选中课程：
                         <strong>{selectedCourse?.courseName ?? '请先在左侧选择课程'}</strong>
                       </p>
-                      <label>
+                      <label htmlFor="assignment-title">
                         作业标题
                         <input
+                          id="assignment-title"
+                          name="title"
+                          required
+                          minLength={2}
+                          title="作业标题至少 2 位"
                           value={assignmentDraft.title}
                           onChange={(event) =>
                             setAssignmentDraft((current) => ({ ...current, title: event.target.value }))
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="assignment-description">
                         作业描述
                         <textarea
+                          id="assignment-description"
+                          name="description"
+                          required
+                          minLength={2}
+                          title="作业描述至少 2 位"
                           value={assignmentDraft.description}
                           onChange={(event) =>
                             setAssignmentDraft((current) => ({
@@ -1503,9 +1568,14 @@ function App() {
                           }
                         />
                       </label>
-                      <label>
+                      <label htmlFor="assignment-requirement">
                         作业要求
                         <textarea
+                          id="assignment-requirement"
+                          name="requirement"
+                          required
+                          minLength={2}
+                          title="作业要求至少 2 位"
                           value={assignmentDraft.requirement}
                           onChange={(event) =>
                             setAssignmentDraft((current) => ({
@@ -1516,10 +1586,14 @@ function App() {
                         />
                       </label>
                       <div className="form-grid">
-                        <label>
+                        <label htmlFor="assignment-start-at">
                           开始时间
                           <input
+                            id="assignment-start-at"
+                            name="startAt"
                             type="datetime-local"
+                            required
+                            title="请选择开始时间"
                             value={toDateTimeLocalValue(assignmentDraft.startAt)}
                             onChange={(event) =>
                               setAssignmentDraft((current) => ({
@@ -1529,10 +1603,14 @@ function App() {
                             }
                           />
                         </label>
-                        <label>
+                        <label htmlFor="assignment-due-at">
                           截止时间
                           <input
+                            id="assignment-due-at"
+                            name="dueAt"
                             type="datetime-local"
+                            required
+                            title="请选择截止时间"
                             value={toDateTimeLocalValue(assignmentDraft.dueAt)}
                             onChange={(event) =>
                               setAssignmentDraft((current) => ({
@@ -1543,9 +1621,13 @@ function App() {
                           />
                         </label>
                       </div>
-                      <label>
+                      <label htmlFor="assignment-cancel-reason">
                         取消原因
                         <input
+                          id="assignment-cancel-reason"
+                          name="cancelReason"
+                          minLength={2}
+                          title="取消作业时需填写至少 2 字的原因"
                           value={assignmentCancelReason}
                           onChange={(event) => setAssignmentCancelReason(event.target.value)}
                         />
@@ -1624,9 +1706,12 @@ function App() {
                     }}
                   >
                     <div className="form-grid">
-                      <label>
+                      <label htmlFor="course-feedback-dimension">
                         反馈维度
                         <select
+                          id="course-feedback-dimension"
+                          name="dimension"
+                          required
                           value={courseFeedbackDraft.dimension}
                           onChange={(event) =>
                             setCourseFeedbackDraft((current) => ({
@@ -1643,9 +1728,14 @@ function App() {
                         </select>
                       </label>
                     </div>
-                    <label>
+                    <label htmlFor="course-feedback-content">
                       课程反馈内容
                       <textarea
+                        id="course-feedback-content"
+                        name="content"
+                        required
+                        minLength={2}
+                        title="请输入课程反馈内容"
                         value={courseFeedbackDraft.content}
                         onChange={(event) =>
                           setCourseFeedbackDraft((current) => ({
@@ -1865,9 +1955,12 @@ function App() {
                     }}
                   >
                     <div className="form-grid">
-                      <label>
+                      <label htmlFor="feedback-kind">
                         类型
                         <select
+                          id="feedback-kind"
+                          name="kind"
+                          required
                           value={feedbackDraft.kind}
                           onChange={(event) =>
                             setFeedbackDraft((current) => ({
@@ -1881,9 +1974,14 @@ function App() {
                         </select>
                       </label>
                     </div>
-                    <label>
+                    <label htmlFor="feedback-content">
                       内容
                       <textarea
+                        id="feedback-content"
+                        name="content"
+                        required
+                        minLength={2}
+                        title="请输入问题或反馈内容"
                         value={feedbackDraft.content}
                         onChange={(event) =>
                           setFeedbackDraft((current) => ({ ...current, content: event.target.value }))
@@ -2002,6 +2100,11 @@ function App() {
                             }}
                           >
                             <input
+                              aria-label="教师回复内容"
+                              name="responseContent"
+                              required
+                              minLength={2}
+                              title="请输入回复内容"
                               value={responseDraft}
                               onChange={(event) => setResponseDraft(event.target.value)}
                             />

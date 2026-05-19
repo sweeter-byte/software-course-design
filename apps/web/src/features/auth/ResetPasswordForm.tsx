@@ -35,40 +35,66 @@ export function ResetPasswordForm({
       >
         <p className="muted-paragraph">忘记密码时，可通过手机号验证码重置。</p>
         <div className="form-grid">
-          <label>
+          <label htmlFor="reset-phone">
             手机号
             <input
+              id="reset-phone"
+              name="phone"
+              type="tel"
+              inputMode="numeric"
               autoComplete="tel"
+              required
+              minLength={11}
+              maxLength={11}
+              pattern="\d{11}"
+              title="请输入 11 位手机号"
               value={values.phone}
               onChange={(event) => onChange({ ...values, phone: event.target.value })}
             />
           </label>
-          <label>
+          <label htmlFor="reset-verification-code">
             验证码
             <input
+              id="reset-verification-code"
+              name="verificationCode"
+              inputMode="numeric"
               autoComplete="one-time-code"
+              required
+              minLength={4}
+              maxLength={6}
+              title="请输入收到的验证码"
               value={values.verificationCode}
               onChange={(event) =>
                 onChange({ ...values, verificationCode: event.target.value })
               }
             />
           </label>
-          <label>
+          <label htmlFor="reset-new-password">
             新密码
             <input
+              id="reset-new-password"
+              name="newPassword"
               autoComplete="new-password"
               type="password"
+              required
+              minLength={6}
+              title="新密码至少 6 位"
               value={values.newPassword}
               onChange={(event) =>
                 onChange({ ...values, newPassword: event.target.value })
               }
             />
           </label>
-          <label>
+          <label htmlFor="reset-confirm-password">
             确认新密码
             <input
+              id="reset-confirm-password"
+              name="confirmPassword"
               autoComplete="new-password"
               type="password"
+              required
+              minLength={6}
+              title="请再次输入新密码"
               value={values.confirmPassword}
               onChange={(event) =>
                 onChange({ ...values, confirmPassword: event.target.value })

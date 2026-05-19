@@ -76,6 +76,10 @@ export function FeedbackThreadList({
           >
             <input
               aria-label={`回复 ${feedback.studentName ?? feedback.studentId} 的反馈`}
+              name="responseContent"
+              required
+              minLength={2}
+              title="请输入回复内容"
               value={responseDraft}
               onChange={(event) => onResponseDraftChange(event.target.value)}
             />

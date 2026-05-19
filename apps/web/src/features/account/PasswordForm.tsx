@@ -31,31 +31,46 @@ export function PasswordForm({
         onSubmit()
       }}
     >
-      <input autoComplete="username" hidden readOnly value={phone} />
+      <input autoComplete="username" hidden readOnly value={phone} name="phone" />
       <div className="form-grid">
-        <label>
+        <label htmlFor="account-old-password">
           旧密码
           <input
+            id="account-old-password"
+            name="oldPassword"
             autoComplete="current-password"
             type="password"
+            required
+            minLength={6}
+            title="请输入旧密码"
             value={values.oldPassword}
             onChange={(event) => onChange({ ...values, oldPassword: event.target.value })}
           />
         </label>
-        <label>
+        <label htmlFor="account-new-password">
           新密码
           <input
+            id="account-new-password"
+            name="newPassword"
             autoComplete="new-password"
             type="password"
+            required
+            minLength={6}
+            title="新密码至少 6 位"
             value={values.newPassword}
             onChange={(event) => onChange({ ...values, newPassword: event.target.value })}
           />
         </label>
-        <label>
+        <label htmlFor="account-confirm-password">
           确认新密码
           <input
+            id="account-confirm-password"
+            name="confirmPassword"
             autoComplete="new-password"
             type="password"
+            required
+            minLength={6}
+            title="请再次输入新密码"
             value={values.confirmPassword}
             onChange={(event) => onChange({ ...values, confirmPassword: event.target.value })}
           />

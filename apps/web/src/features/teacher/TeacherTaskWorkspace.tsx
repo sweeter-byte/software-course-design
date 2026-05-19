@@ -117,18 +117,32 @@ export function TeacherTaskWorkspace({
           }}
         >
           <div className="form-grid">
-            <label>
+            <label htmlFor="grade-score">
               分数
               <input
+                id="grade-score"
+                name="gradeScore"
                 aria-label="提交分数"
+                type="number"
+                inputMode="decimal"
+                min={0}
+                max={100}
+                step="0.1"
+                required
+                title="分数范围 0 - 100"
                 value={gradeScore}
                 onChange={(event) => onGradeScoreChange(event.target.value)}
               />
             </label>
-            <label>
+            <label htmlFor="grade-feedback">
               评语
               <textarea
+                id="grade-feedback"
+                name="gradeFeedback"
                 aria-label="批改评语"
+                required
+                minLength={2}
+                title="请输入批改意见"
                 value={gradeFeedback}
                 onChange={(event) => onGradeFeedbackChange(event.target.value)}
               />

@@ -89,9 +89,14 @@ export function StudentAssignmentWorkspace({
             <p className="muted-paragraph">尚未提交答案。</p>
           )}
         </div>
-        <label>
+        <label htmlFor="student-submission-content">
           提交内容
           <textarea
+            id="student-submission-content"
+            name="submissionContent"
+            required={canEditSubmission}
+            minLength={2}
+            title="答案内容至少 2 位"
             value={submissionContent}
             onChange={(event) => onSubmissionContentChange(event.target.value)}
             readOnly={!canEditSubmission}
@@ -128,9 +133,12 @@ export function StudentAssignmentWorkspace({
           )}
         </div>
         <div className="form-grid">
-          <label>
+          <label htmlFor="student-feedback-kind">
             类型
             <select
+              id="student-feedback-kind"
+              name="feedbackKind"
+              required
               value={feedbackKind}
               onChange={(event) => onFeedbackKindChange(event.target.value as 'question' | 'feedback')}
               disabled={!isGraded}
@@ -140,9 +148,14 @@ export function StudentAssignmentWorkspace({
             </select>
           </label>
         </div>
-        <label>
+        <label htmlFor="student-feedback-content">
           内容
           <textarea
+            id="student-feedback-content"
+            name="feedbackContent"
+            required={isGraded}
+            minLength={2}
+            title="请输入问题或反馈内容"
             value={feedbackContent}
             onChange={(event) => onFeedbackContentChange(event.target.value)}
             disabled={!isGraded}
