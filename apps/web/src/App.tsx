@@ -1,5 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 import './App.css'
 import { ApiError, api, type SessionPayload } from './api'
@@ -101,6 +102,43 @@ const roleNavigation: Record<UserRole, Array<{ view: WorkspaceView; label: strin
   ],
 }
 
+const viewToSegment: Record<WorkspaceView, string> = {
+  dashboard: 'dashboard',
+  courses: 'courses',
+  courseAdmin: 'course-admin',
+  assignments: 'assignments',
+  grading: 'grading',
+  courseFeedbacks: 'course-feedbacks',
+  interaction: 'interaction',
+  userAdmin: 'user-admin',
+  account: 'account',
+}
+
+const segmentToView: Record<string, WorkspaceView> = Object.fromEntries(
+  (Object.entries(viewToSegment) as Array<[WorkspaceView, string]>).map(([view, segment]) => [
+    segment,
+    view,
+  ]),
+)
+
+function viewPath(role: UserRole, view: WorkspaceView): string {
+  return `/${role}/${viewToSegment[view]}`
+}
+
+function parseRouteView(
+  pathname: string,
+  role: UserRole | undefined,
+): WorkspaceView | null {
+  if (!role) return null
+  const match = /^\/(student|teacher|officer)\/([a-z-]+)\/?$/.exec(pathname)
+  if (!match) return null
+  if (match[1] !== role) return null
+  const view = segmentToView[match[2]]
+  if (!view) return null
+  if (!roleNavigation[role].some((item) => item.view === view)) return null
+  return view
+}
+
 const summaryLabels: Record<string, string> = {
   totalCourses: '课程总数',
   totalTeachers: '教师总数',
@@ -152,13 +190,14 @@ function SectionCard(props: { title: string; subtitle: string; children: ReactNo
 
 function App() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [initialRuntimeState] = useState(() =>
     readInitialRuntimeState(window.localStorage, DEFAULT_API_BASE_URL),
   )
   const apiBaseUrl = initialRuntimeState.apiBaseUrl
   const [session, setSession] = useState<SessionPayload | null>(initialRuntimeState.session)
   const [authMode, setAuthMode] = useState<AuthMode>('login')
-  const [activeView, setActiveView] = useState<WorkspaceView>('dashboard')
   const { notifications, notify, dismiss: dismissNotification } = useNotifications()
   useEffect(() => {
     const id = notify({
@@ -261,12 +300,25 @@ function App() {
   const [userAdminPendingId, setUserAdminPendingId] = useState<string | null>(null)
   const currentRole = session?.user.role
   const navItems = currentRole ? roleNavigation[currentRole] : []
-  const visibleView = navItems.some((item) => item.view === activeView) ? activeView : 'dashboard'
+  const routeView = parseRouteView(location.pathname, currentRole)
+  const visibleView: WorkspaceView = routeView ?? 'dashboard'
   const activePageTitle = viewLabels[visibleView]
 
   useEffect(() => {
     window.localStorage.setItem('cms_session', JSON.stringify(session))
   }, [session])
+
+  useEffect(() => {
+    if (!currentRole) {
+      if (location.pathname !== '/login') {
+        navigate('/login', { replace: true })
+      }
+      return
+    }
+    if (!routeView) {
+      navigate(viewPath(currentRole, 'dashboard'), { replace: true })
+    }
+  }, [currentRole, location.pathname, routeView, navigate])
 
   const dashboardQuery = useQuery({
     enabled: Boolean(session),
@@ -434,8 +486,8 @@ function App() {
         type: 'success',
         content: `${roleLabels[payload.user.role]} ${payload.user.realName}，欢迎回来。`,
       })
+      navigate(viewPath(payload.user.role, 'dashboard'), { replace: true })
       startTransition(() => {
-        setActiveView('dashboard')
         resetWorkspaceSelection()
       })
     },
@@ -1083,7 +1135,11 @@ function App() {
               key={item.view}
               className={visibleView === item.view ? 'nav-item active' : 'nav-item'}
               type="button"
-              onClick={() => setActiveView(item.view)}
+              onClick={() => {
+                if (currentRole) {
+                  navigate(viewPath(currentRole, item.view))
+                }
+              }}
             >
               <span className="nav-icon" aria-hidden="true">
                 {item.label.slice(0, 1)}
