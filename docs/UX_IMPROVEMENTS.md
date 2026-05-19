@@ -1,0 +1,161 @@
+# 课程互动管理系统 · 用户体验改进追踪
+
+本文档记录针对系统验收期的可用性 / 完整性改进项，按优先级分为 P0 / P1 / P2 三个梯队：
+
+- **P0** — 已完成（截至 2026-05-19）。已并入 `main` 分支。
+- **P1** — 待办，影响体验但不阻塞验收。
+- **P2** — 待办，架构与可扩展性优化。
+
+用途：
+1. 新会话延续工作时，可直接基于本文件查阅已完成与待办。
+2. 提交外部审核（codex 等）时，作为「需求 → 实施 → 验证」的单点入口。
+
+---
+
+## 当前基线（参考点）
+
+- 分支：`main`
+- 最近提交：`23d0851 feat(web): surface validation_failed field errors in user-facing messages`
+- 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 53 通过 / 13 文件；`npm run typecheck` 全绿；`npm run lint` 全绿。
+- 关键命令（沿用 `CLAUDE.md`）：
+  ```bash
+  npm run dev                # server + web together
+  npm run test               # 全工作区 + scripts/tests/dev-runtime.test.sh
+  npm run typecheck          # 全工作区
+  npm run lint               # 全工作区
+  ```
+
+---
+
+## P0 · 已完成
+
+P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动管理系统 完整性与可用性评估」）：
+1. 「我的已选课程」状态刷新后丢失。
+2. 教师端 `assignments / grading / interaction` 三个侧栏入口与渲染不是一一对应。
+3. `validation_failed` 错误对用户笼统提示，未把字段错误暴露出来。
+
+### P0-1 · 学生「我的已选课程」状态接入服务端
+
+| 项 | 内容 |
+| --- | --- |
+| 提交 | `17de21d feat(courses): expose student enrollment state on course listings` |
+| 后端改动 | `apps/server/src/modules/courses/routes.ts`：`GET /courses` 与 `GET /courses/:courseId` 在学生角色调用时 `LEFT JOIN course_enrollments`，返回 `enrolled: boolean`；`GET /courses` 新增 `enrolledOnly=true`（仅学生）过滤。其他角色响应不带 `enrolled` 字段。 |
+| 前端改动 | `apps/web/src/App.tsx`：移除 `joinedCourseIds` 本地 `useState`；侧栏「已加入/可加入」徽章与 hero 中「已加入课程」计数都改读 `course.enrolled`；`enrollMutation` 成功/已加入分支改为 invalidate `['courses']` 让 React Query 重取。`apps/web/src/domain.ts`：`CourseItem` 增加 `enrolled?: boolean`。 |
+| 文档 | `docs/API_SPEC.md`：`GET /courses` / `GET /courses/:courseId` 段落补充 `enrolled`、`enrolledOnly` 说明。 |
+| 测试 | `apps/server/tests/enrollments.integration.test.ts` 新增 3 个用例：列表/详情的 `enrolled` 字段、`enrolledOnly=true` 过滤、教务员调用不应携带 `enrolled`。 |
+| 验收准则 | 学生加入课程后刷新浏览器，「已加入」徽章与 dashboard 计数依然正确；教务员/教师调用不受影响。 |
+
+### P0-2 · 教师端侧栏三入口收敛
+
+| 项 | 内容 |
+| --- | --- |
+| 提交 | `a4e6442 refactor(web): collapse teacher's grading and interaction nav into one entry` |
+| 背景 | 原侧栏 `grading`（教师任务）与 `interaction`（待回复反馈）通过 `className: visibleView === 'grading' || visibleView === 'interaction'` 共用同一个 `TeacherTaskWorkspace` SectionCard，两条导航项指向同一处渲染，造成心智模型混乱。 |
+| 前端改动 | `apps/web/src/App.tsx`：`roleNavigation.teacher` 删除 `interaction` 条目；`feedbackThreadsQuery.enabled` 与 `TeacherTaskWorkspace` 卡片的 `view-hidden` 条件改为只判断 `visibleView === 'grading'`。教师标签更新为「教学任务 · 批改提交 · 回复反馈」。学生侧栏的 `interaction` 入口保持不变。 |
+| 文档 | `docs/ACCEPTANCE_SELF_CHECK.md` 与 `docs/MANUAL_ACCEPTANCE_DEMO_CHECKLIST.md` 中提到「教师任务/待回复反馈」的位置一并改为「教学任务」。 |
+| 测试 | 复用现有 `TeacherTaskWorkspace` 单元测试（13 文件 / 49 用例）。`WorkspaceView` 类型仍保留 `interaction`，因学生仍使用。 |
+| 验收准则 | 教师登录后侧栏顺序为「工作台 / 课程 / 作业管理 / 教学任务 / 课程反馈 / 账号维护」；点击任一入口都有唯一对应卡片，无重复。 |
+
+### P0-3 · 校验错误暴露到字段级提示
+
+| 项 | 内容 |
+| --- | --- |
+| 提交 | `23d0851 feat(web): surface validation_failed field errors in user-facing messages` |
+| 后端 | 无改动。`apps/server/src/lib/http.ts` 早已在 `toAppError` 把 `ZodError.issues` 放入 `error.details`。 |
+| 前端改动 | `apps/web/src/api.ts`：新增 `ValidationIssue` 类型；`ApiError` 携带 `code` 与 `details`；`requestJson` 从 `payload.error.details` 解析并校验形状。`apps/web/src/utils/errors.ts`：`friendlyErrorMessage(message, details?)` 在 `validation_failed` 且 `details` 非空时，按 `字段标签：原因；…` 拼接；新增 `fieldLabels` 表覆盖手机号 / 密码 / 验证码 / 课程相关字段。`apps/web/src/App.tsx`：`extractErrorMessage` 把 `ApiError.details` 透传给 `friendlyErrorMessage`。 |
+| 文档 | `docs/API_SPEC.md` 错误响应示例补充 `details` 内容与中文说明。 |
+| 测试 | `apps/web/src/utils/errors.test.ts` +3 用例（有字段标签 / 无 details 回退 / 未知字段路径降级）；`apps/web/src/api.test.ts` +1 用例（验证 `ApiError` 携带 `code` 与 `details`）。 |
+| 验收准则 | 在登录、注册、创建课程等表单提交错误数据时，顶部通知条显示「请检查填写内容：手机号：手机号格式不正确；密码：至少 8 位…」而非笼统的「请检查填写内容后再提交」。 |
+
+---
+
+## P1 · 待办（影响体验）
+
+> P1 实施建议每项独立 commit，便于代码审核。预计每项 1–2 小时工作量。
+
+### P1-4 · `notice` 改为 toast 队列
+
+| 项 | 内容 |
+| --- | --- |
+| 现状 | `apps/web/src/App.tsx` 用单一 `notice: string` + 顶部 `notice-bar` 显示反馈（约 `App.tsx:1057`）。连续操作时旧提示被新提示直接覆盖，用户可能完全错过先前的成功/失败信号。 |
+| 目标 | 多条提示能堆叠、有进入/退出动画、自动消失；保留 `aria-live="polite"`。 |
+| 建议实施 | 1. 新建 `apps/web/src/hooks/useNotifications.ts`：维护 `{id, type, content, expiresAt}[]`，提供 `notify({type, content, ttl?})` / `dismiss(id)`；可借助 `useReducer` 与 `setTimeout`。2. 在 `App.tsx` 顶部渲染 `<NotificationStack />`（新建 `apps/web/src/components/feedback/NotificationStack.tsx`），把所有 `setNotice(...)` 调用替换为 `notify({type, content})`。`type` 取 `'info' | 'success' | 'error'`。3. CSS 在 `apps/web/src/App.css` 复用 `notice-bar` 配色，叠加 `position: fixed; top: 1rem; right: 1rem; display: flex; flex-direction: column;`。4. 不引入第三方库（项目现有依赖最小）。 |
+| 验收准则 | 连续触发两次错误（例如重复加入课程），两条都可见、能分别 dismiss；屏幕宽度 < 600px 时仍可读；无障碍：每条通知有 `role="status"`。 |
+| 风险 | `setNotice` 站点 ≈ 25 处，需逐个迁移；批量替换前先确认无 `notice` 直接读出（应只在 `notice-bar` 渲染处读）。 |
+
+### P1-5 · 破坏性操作统一二次确认
+
+| 项 | 内容 |
+| --- | --- |
+| 现状 | `apps/web/src/App.tsx` 中 `window.confirm(...)` 已用于删除课程、取消作业、删除课程反馈（搜索 `window.confirm`）；但**删除问题/反馈、删除回复、注销账号**目前直接 `mutate()` 无二次确认（参考点：`App.tsx` 中 `deleteFeedbackMutation`、`deleteResponseMutation`、`deleteAccountMutation` 的 onClick）。 |
+| 目标 | 所有不可逆操作都需要二次确认，且文案一致。 |
+| 建议实施 | 1. 抽出 `apps/web/src/hooks/useConfirm.ts` 或简单 helper `confirmDestructive(message: string): boolean`，内部仍可用 `window.confirm` 作为最小可行实现；2. 后续可演进为自建对话框（`<ConfirmDialog />`），允许键盘 Esc 取消、Enter 确认；3. 把所有 destructive mutation 的 `onClick` 都包一层 `if (!confirmDestructive('...')) return;`；4. 列出需要补充的位置：删除反馈、删除回复、删除自己提交的课程反馈（学生）、删除自己提的作业问题、注销账号。 |
+| 验收准则 | 上述五类删除/注销操作均弹出确认，文案一致；取消后无副作用；P1-4 完成后可结合 toast 显示「已取消操作」。 |
+| 风险 | 注销账号后端可能未实现「逻辑删除还是物理删除」分支；不要改变后端行为，只在前端补确认。 |
+
+### P1-6 · 表单加 HTML5 原生校验
+
+| 项 | 内容 |
+| --- | --- |
+| 现状 | 注册、改密、改手机、创建课程等表单的 `<input>` 都没有 `required` / `pattern` / `minLength` 等属性，依赖服务端 Zod 兜底。后端 400 → 经 P0-3 已能展示字段错误，但用户依然要等一次网络往返。 |
+| 目标 | 常见错误（手机号格式、密码长度、必填）在浏览器侧立即提示，减少无谓的请求。 |
+| 建议实施 | 1. 优先改动入口：`apps/web/src/features/auth/LoginForm.tsx`、`StudentRegisterForm.tsx`、`ResetPasswordForm.tsx`；`apps/web/src/features/account/{PasswordForm,PhoneChangeForm,ProfileForm}.tsx`；`apps/web/src/App.tsx` 中的课程/作业表单。2. 字段约束建议（与 `packages/shared/src/index.ts` 中的 Zod 保持一致）：手机号 `pattern="^1[3-9]\\d{9}$"`、密码 `minLength={8}` + `pattern` 匹配大小写+数字、验证码 `pattern="^\\d{6}$"`、学号 `pattern="^\\d{6,}$"` 等。3. 同时为 `<label>` 绑定 `htmlFor` / `id` 以提升可访问性。 |
+| 验收准则 | 在登录页输入 `123`，浏览器原生 tooltip 报错且不发起请求；同时键盘 Tab 顺序正确、屏读能读出 label。 |
+| 风险 | 须与后端 Zod 校验完全一致，否则会出现「前端通过但后端报错」的迷惑场景；改动前对照 `packages/shared/src/index.ts` 中各 schema 的 `.regex/.min/.max` 调用。 |
+
+### P1-7 · 教务员补「用户管理」最小集
+
+| 项 | 内容 |
+| --- | --- |
+| 现状 | `docs/PROJECT_SUMMARY.md` 描述教务员应「统筹账号与课程运行情况」，但目前教务员侧栏没有用户列表入口，也没有禁用/启用账号的接口。 |
+| 目标 | 教务员可以查看全部用户、按角色筛选、禁用/恢复账号。先做「列表 + 启停」最小集，后续再加重置密码等。 |
+| 建议实施 | 1. 后端：`apps/server/src/lib/db/schema.ts` 给 `users` 表加 `is_disabled INTEGER NOT NULL DEFAULT 0`（CHECK 0/1）；登录路径在 `apps/server/src/modules/auth/routes.ts` 增加禁用账号阻断（`AppError('account_disabled', 403, 'ACCOUNT_DISABLED')`）。2. 新增 `apps/server/src/modules/users/routes.ts` 中：`GET /users`（教务员，支持 `role` 过滤）与 `PATCH /users/:userId/status`（教务员，body `{disabled: boolean}`）。3. 前端：`apps/web/src/App.tsx` 给 `roleNavigation.officer` 增加 `{ view: 'userAdmin', label: '用户管理', hint: '账号列表与启停' }`；新建 `apps/web/src/features/officer/UserAdminSection.tsx` 完成列表 + 切换。4. 文档：`docs/API_SPEC.md` 与 `docs/REQUIREMENTS_TRACEABILITY.md` 补充。 |
+| 验收准则 | 教务员能看到全部账号；点「禁用」后该用户登录被拒，错误码 `ACCOUNT_DISABLED` 被映射为中文文案；恢复后可再次登录；不允许禁用自己。 |
+| 风险 | 数据库 migration：schema.ts 是单一 `database.exec`，新字段加上 `DEFAULT 0` 即兼容老数据；测试库是内存库每次重建，无迁移风险，但要更新 `apps/server/src/seedDemoData.ts` 不要插入 `is_disabled` 时报错（若用 INSERT 列名列表，DEFAULT 会自动填入）。 |
+
+---
+
+## P2 · 待办（架构与可扩展性）
+
+> P2 改动跨度较大，建议各自独立分支 + PR；完成前可与本文件 P0/P1 解耦推进。
+
+### P2-8 · 按视图拆分 `App.tsx` + 引入 React Router
+
+| 项 | 内容 |
+| --- | --- |
+| 现状 | `apps/web/src/App.tsx` 仍约 2000 行；所有视图通过 `view-hidden` 类常驻 DOM，由 `visibleView` 切换。优点是切换无白屏，缺点是 DOM 庞大、状态全局共享、URL 无法分享、无前进/后退。 |
+| 目标 | 按 `WorkspaceView` 把内容拆为路由组件，浏览器地址栏反映当前视图，支持分享与深链。 |
+| 建议实施 | 1. 引入 `react-router-dom@^7` 并在 `apps/web/vite.config.ts` dedupe（保持现有 React/ReactDOM dedupe 风格）；2. 把 `apps/web/src/App.tsx` 改为 `<RouterProvider>` 容器；路由结构：`/login`、`/student/{dashboard,courses,assignments,interaction,course-feedbacks,account}`、`/teacher/{dashboard,courses,assignments,grading,course-feedbacks,account}`、`/officer/{dashboard,courses,course-admin,course-feedbacks,user-admin,account}`。3. 抽出 `apps/web/src/features/{role}/views/{ViewName}.tsx`，复用现有子组件（`StudentAssignmentWorkspace` 等）。4. 顶部「当前工作上下文」与 React Query 状态保持全局，通过 Context 或 url search params 持久化。 |
+| 验收准则 | 浏览器前进/后退能在视图间切换；刷新 `/teacher/grading` 仍落地正确卡片；无任一现有用例 / 集成测试回归。 |
+| 风险 | 单文件拆分量大；建议先完成 P0/P1 减少冲突再做。可分若干 PR：路由骨架 → 学生视图迁移 → 教师视图迁移 → 教务员视图迁移 → 删除 `view-hidden`。 |
+
+### P2-9 · 移动端响应式：侧栏改抽屉
+
+| 项 | 内容 |
+| --- | --- |
+| 现状 | `apps/web/src/App.css` 仅在 `1180px` 与 `840px` 两条媒体查询做基本两列 → 单列调整；小屏（手机）侧栏（`.app-sidebar`）依然横向占满，挤压主内容。 |
+| 目标 | 在 `< 840px` 时侧栏改为抽屉（hamburger 触发），主区域占满；表单 `<input>` 字号增大。 |
+| 建议实施 | 1. 新增 `apps/web/src/components/layout/SidebarDrawer.tsx`：受控的抽屉组件（`isOpen` + `onClose`，点击遮罩关闭，Esc 关闭，焦点 trap 可选）；2. 在 `App.tsx` 中根据 `useMediaQuery('(max-width: 840px)')`（自建 hook 或简单 `matchMedia`）切换渲染模式；3. CSS 在 `App.css` 增加 `.sidebar-drawer` 类，控制位置/动画；4. hamburger 按钮放在顶部 hero 上方。 |
+| 验收准则 | 在 360–414px 视窗下可流畅操作；抽屉打开时遮罩 dismissable；不影响桌面端布局。 |
+| 风险 | P2-8 拆路由完成后再做更顺；如先做需注意状态在 sidebar 与 drawer 间一致。 |
+
+### P2-10 · 按路由条件渲染替换 `view-hidden`
+
+| 项 | 内容 |
+| --- | --- |
+| 现状 | 即使切到 `account` 视图，`dashboard`、`courses`、`assignments` 等全部 DOM 子树仍然挂载（仅 CSS 隐藏），React Query 部分由 `enabled` 控制但 DOM/事件监听仍全开。 |
+| 目标 | 仅渲染当前激活视图的 DOM，降低初始 / 切换成本，并便于代码分割。 |
+| 建议实施 | 1. 依赖 P2-8 的路由化完成；2. 把 `view-hidden` 全部移除，用路由 `<Route element={<DashboardView />} />` 替代；3. 配合 `React.lazy` + `<Suspense fallback={<StatePanel … />}>` 做按需加载（每个 role 一个 chunk 即可，过度拆分反而增加请求数）；4. 验证 React Query 缓存（`queryClient`）跨视图切换无失效，`staleTime` 视情况调整。 |
+| 验收准则 | DevTools Performance 显示视图切换时 DOM 节点变化合理；首屏 JS chunk 显著减小（用 `vite build --report` 查看）；用户感知无白屏（`<Suspense>` fallback 在 100ms 内消失）。 |
+| 风险 | 同 P2-8。若想保留「不白屏」的现有体验，可只对 `account / userAdmin / courseAdmin` 这些重型视图做 lazy，其余保持同步加载。 |
+
+---
+
+## 给审核者的速查
+
+- 所有 P0 改动均带新增测试，可通过 `npm run test` 与 `npm run typecheck` 整体验证。
+- P0 涉及文件（按重要性）：
+  - 后端：`apps/server/src/modules/courses/routes.ts`、`apps/server/tests/enrollments.integration.test.ts`
+  - 前端：`apps/web/src/api.ts`、`apps/web/src/utils/errors.ts`、`apps/web/src/App.tsx`、`apps/web/src/domain.ts`
+  - 文档：`docs/API_SPEC.md`、`docs/ACCEPTANCE_SELF_CHECK.md`、`docs/MANUAL_ACCEPTANCE_DEMO_CHECKLIST.md`
+- P1/P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
