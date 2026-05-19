@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import './App.css'
 import { ApiError, api, type SessionPayload } from './api'
+import { SidebarDrawer } from './components/layout/SidebarDrawer'
 import { WorkspaceContextBar } from './components/layout/WorkspaceContextBar'
 import { NotificationStack } from './components/notifications/NotificationStack'
 import { StatePanel } from './components/ui/StatePanel'
@@ -22,6 +23,7 @@ import { LoginShell, type AuthMode } from './features/auth/LoginShell'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
 import { UserAdminSection } from './features/officer/UserAdminSection'
+import { useMediaQuery } from './hooks/useMediaQuery'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
 import { readInitialRuntimeState } from './runtime-state'
@@ -298,6 +300,9 @@ function App() {
   })
   const [userAdminRoleFilter, setUserAdminRoleFilter] = useState<'' | UserRole>('')
   const [userAdminPendingId, setUserAdminPendingId] = useState<string | null>(null)
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
+  const isCompactViewport = useMediaQuery('(max-width: 840px)')
+  const isDrawerOpen = isCompactViewport && isMobileNavOpen
   const currentRole = session?.user.role
   const navItems = currentRole ? roleNavigation[currentRole] : []
   const routeView = parseRouteView(location.pathname, currentRole)
@@ -1116,54 +1121,87 @@ function App() {
     )
   }
 
+  const sidebarBody = (
+    <>
+      <div className="sidebar-brand">
+        <div className="brand-crest">
+          <span>航</span>
+        </div>
+        <div>
+          <h1>课程互动管理系统</h1>
+          <p>{roleLabels[session.user.role]}端</p>
+        </div>
+      </div>
+
+      <nav className="sidebar-nav" aria-label="Web 端功能导航">
+        {navItems.map((item) => (
+          <button
+            key={item.view}
+            className={visibleView === item.view ? 'nav-item active' : 'nav-item'}
+            type="button"
+            onClick={() => {
+              if (currentRole) {
+                navigate(viewPath(currentRole, item.view))
+              }
+              if (isCompactViewport) {
+                setIsMobileNavOpen(false)
+              }
+            }}
+          >
+            <span className="nav-icon" aria-hidden="true">
+              {item.label.slice(0, 1)}
+            </span>
+            <span>
+              <strong>{item.label}</strong>
+              <small>{item.hint}</small>
+            </span>
+          </button>
+        ))}
+      </nav>
+
+      <div className="sidebar-footer">
+        <span className="service-dot" />
+        <p>平台运行正常</p>
+      </div>
+      <div className="sidebar-guide">
+        <strong>使用指引</strong>
+        <p>{workspaceTips[0]}</p>
+      </div>
+    </>
+  )
+
   return (
-    <div className="page-shell">
-      <aside className="brand-rail app-sidebar">
-        <div className="sidebar-brand">
-          <div className="brand-crest">
-            <span>航</span>
-          </div>
-          <div>
-            <h1>课程互动管理系统</h1>
-            <p>{roleLabels[session.user.role]}端</p>
-          </div>
-        </div>
-
-        <nav className="sidebar-nav" aria-label="Web 端功能导航">
-          {navItems.map((item) => (
-            <button
-              key={item.view}
-              className={visibleView === item.view ? 'nav-item active' : 'nav-item'}
-              type="button"
-              onClick={() => {
-                if (currentRole) {
-                  navigate(viewPath(currentRole, item.view))
-                }
-              }}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                {item.label.slice(0, 1)}
-              </span>
-              <span>
-                <strong>{item.label}</strong>
-                <small>{item.hint}</small>
-              </span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <span className="service-dot" />
-          <p>平台运行正常</p>
-        </div>
-        <div className="sidebar-guide">
-          <strong>使用指引</strong>
-          <p>{workspaceTips[0]}</p>
-        </div>
-      </aside>
+    <div className={`page-shell${isCompactViewport ? ' page-shell-compact' : ''}`}>
+      {isCompactViewport ? (
+        <SidebarDrawer
+          isOpen={isDrawerOpen}
+          onClose={() => setIsMobileNavOpen(false)}
+          ariaLabel="功能导航"
+        >
+          {sidebarBody}
+        </SidebarDrawer>
+      ) : (
+        <aside className="brand-rail app-sidebar">{sidebarBody}</aside>
+      )}
 
       <main className="workspace">
         <header className="workspace-head">
+          {isCompactViewport ? (
+            <button
+              type="button"
+              className="hamburger-button"
+              aria-label="打开功能导航"
+              aria-expanded={isDrawerOpen}
+              aria-controls="sidebar-drawer"
+              onClick={() => setIsMobileNavOpen(true)}
+            >
+              <span className="hamburger-bars" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
+          ) : null}
           <div className="workspace-title-block">
             <p className="eyebrow">课程互动管理系统</p>
             <h2>{activePageTitle}</h2>
