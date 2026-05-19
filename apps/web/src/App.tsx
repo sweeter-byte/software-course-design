@@ -80,8 +80,7 @@ const roleNavigation: Record<UserRole, Array<{ view: WorkspaceView; label: strin
     { view: 'dashboard', label: '工作台', hint: '教学处理总览' },
     { view: 'courses', label: '课程', hint: '授课课程列表' },
     { view: 'assignments', label: '作业管理', hint: '发布与维护作业' },
-    { view: 'grading', label: '教师任务', hint: '批改与答疑' },
-    { view: 'interaction', label: '待回复反馈', hint: '答疑与回复' },
+    { view: 'grading', label: '教学任务', hint: '批改提交 · 回复反馈' },
     { view: 'courseFeedbacks', label: '课程反馈', hint: '学生课程反馈' },
     { view: 'account', label: '账号维护', hint: '资料与安全' },
   ],
@@ -341,7 +340,7 @@ function App() {
 
   const feedbackThreadsQuery = useQuery({
     enabled: Boolean(
-      session?.user.role === 'teacher' && (visibleView === 'grading' || visibleView === 'interaction'),
+      session?.user.role === 'teacher' && visibleView === 'grading',
     ),
     queryKey: [
       'feedbackThreads',
@@ -1739,7 +1738,7 @@ function App() {
                 }
                 className={
                   currentRole === 'teacher'
-                    ? visibleView === 'grading' || visibleView === 'interaction'
+                    ? visibleView === 'grading'
                       ? undefined
                       : 'view-hidden'
                     : visibleView === 'assignments'
