@@ -3,7 +3,7 @@
 本文档记录针对系统验收期的可用性 / 完整性改进项，按优先级分为 P0 / P1 / P2 三个梯队：
 
 - **P0** — 已完成（截至 2026-05-19）。已并入 `main` 分支。
-- **P1** — 部分完成。P1-4 已完成（2026-05-19），P1-5/6/7 待办。
+- **P1** — 部分完成。P1-4 / P1-5 已完成（2026-05-19），P1-6/7 待办。
 - **P2** — 待办，架构与可扩展性优化。
 
 用途：
@@ -15,8 +15,8 @@
 ## 当前基线（参考点）
 
 - 分支：`main`
-- 最近提交：`721a3af feat(web): stack UI notifications as a dismissible toast queue`
-- 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 61 通过 / 14 文件（含 P1-4 新增的 `useNotifications` 8 用例）；`npm run typecheck` 全绿；`npm run lint` 全绿。
+- 最近提交：`3fa8dc3 feat(web): require confirmation for destructive role actions`（前置：`c3568ef docs: record P1-4 toast queue commit hash in UX tracker`）
+- 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 64 通过 / 15 文件（含 P1-4 新增的 `useNotifications` 8 用例与 P1-5 新增的 `confirmDestructive` 3 用例）；`npm run typecheck` 全绿；`npm run lint` 全绿。
 - 关键命令（沿用 `CLAUDE.md`）：
   ```bash
   npm run dev                # server + web together
@@ -71,6 +71,18 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## P1 · 已完成
 
+### P1-5 · 破坏性操作统一二次确认
+
+| 项 | 内容 |
+| --- | --- |
+| 提交 | `3fa8dc3 feat(web): require confirmation for destructive role actions` |
+| 背景 | 删除课程、取消作业、删除课程反馈三处已使用 `window.confirm`；但**删除问题/反馈、删除回复、注销账号**直接 `mutate()` 无二次确认，导致误触不可逆。 |
+| 前端改动 | 新增 `apps/web/src/utils/confirm.ts`：导出 `confirmDestructive(message: string): boolean`，封装 `window.confirm` 并在没有 `window` 的环境（SSR/测试）下默认放行，便于后续替换为自建对话框。`apps/web/src/App.tsx`：把原有 3 处 `window.confirm`（更新课程、删除课程、取消作业）替换为 `confirmDestructive`；新增 3 处确认入口——`onCancelAccount`（注销账号）、`deleteFeedbackMutation`（学生删除问题/反馈）、`deleteResponseMutation`（教师删除回复）、`deleteCourseFeedbackMutation`（学生删除自己提交的课程反馈）。确认文案保持「确认…吗？」+「删除后无法恢复」尾缀的一致结构。 |
+| 文档 | 本文件（基线测试计数 + P1-5 状态说明）。 |
+| 测试 | 新增 `apps/web/src/utils/confirm.test.ts` 3 用例（确认返回 true / 取消返回 false / message 原样透传）。`npm run test` 全绿（后端 48/10；Web 64/15；dev-runtime parser 测试通过）。 |
+| 偏离 | 使用最小可行实现 `window.confirm`，未抽出 `useConfirm` hook 或自建对话框组件（P1-5 路线图中的「后续可演进」部分）；保留为 utils helper，未来若改成 `<ConfirmDialog />` 只需替换 `confirmDestructive` 实现，调用点无须再次改动。 |
+| 验收准则 | 删除课程 / 取消作业 / 删除课程反馈 / 删除问题反馈 / 删除回复 / 注销账号六类操作均弹出 `window.confirm`；取消后无副作用、无网络请求、无 toast；确认后走原有 mutation 与成功/错误 toast 通知。 |
+
 ### P1-4 · `notice` 改为 toast 队列
 
 | 项 | 内容 |
@@ -87,16 +99,6 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 ## P1 · 待办（影响体验）
 
 > P1 实施建议每项独立 commit，便于代码审核。预计每项 1–2 小时工作量。
-
-### P1-5 · 破坏性操作统一二次确认
-
-| 项 | 内容 |
-| --- | --- |
-| 现状 | `apps/web/src/App.tsx` 中 `window.confirm(...)` 已用于删除课程、取消作业、删除课程反馈（搜索 `window.confirm`）；但**删除问题/反馈、删除回复、注销账号**目前直接 `mutate()` 无二次确认（参考点：`App.tsx` 中 `deleteFeedbackMutation`、`deleteResponseMutation`、`deleteAccountMutation` 的 onClick）。 |
-| 目标 | 所有不可逆操作都需要二次确认，且文案一致。 |
-| 建议实施 | 1. 抽出 `apps/web/src/hooks/useConfirm.ts` 或简单 helper `confirmDestructive(message: string): boolean`，内部仍可用 `window.confirm` 作为最小可行实现；2. 后续可演进为自建对话框（`<ConfirmDialog />`），允许键盘 Esc 取消、Enter 确认；3. 把所有 destructive mutation 的 `onClick` 都包一层 `if (!confirmDestructive('...')) return;`；4. 列出需要补充的位置：删除反馈、删除回复、删除自己提交的课程反馈（学生）、删除自己提的作业问题、注销账号。 |
-| 验收准则 | 上述五类删除/注销操作均弹出确认，文案一致；取消后无副作用；P1-4 完成后可结合 toast 显示「已取消操作」。 |
-| 风险 | 注销账号后端可能未实现「逻辑删除还是物理删除」分支；不要改变后端行为，只在前端补确认。 |
 
 ### P1-6 · 表单加 HTML5 原生校验
 
@@ -158,11 +160,13 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## 给审核者的速查
 
-- P0 与 P1-4 改动均带新增测试，可通过 `npm run test` 与 `npm run typecheck` 整体验证。
+- P0、P1-4、P1-5 改动均带新增测试，可通过 `npm run test` 与 `npm run typecheck` 整体验证。
 - P0 涉及文件（按重要性）：
   - 后端：`apps/server/src/modules/courses/routes.ts`、`apps/server/tests/enrollments.integration.test.ts`
   - 前端：`apps/web/src/api.ts`、`apps/web/src/utils/errors.ts`、`apps/web/src/App.tsx`、`apps/web/src/domain.ts`
   - 文档：`docs/API_SPEC.md`、`docs/ACCEPTANCE_SELF_CHECK.md`、`docs/MANUAL_ACCEPTANCE_DEMO_CHECKLIST.md`
 - P1-4 涉及文件：
   - 前端：`apps/web/src/hooks/useNotifications.ts`、`apps/web/src/hooks/useNotifications.test.ts`、`apps/web/src/components/notifications/NotificationStack.tsx`、`apps/web/src/App.tsx`、`apps/web/src/App.css`、`apps/web/src/features/auth/LoginShell.tsx`、`apps/web/src/features/auth/LoginShell.test.tsx`
-- P1-5/6/7 与 P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
+- P1-5 涉及文件：
+  - 前端：`apps/web/src/utils/confirm.ts`、`apps/web/src/utils/confirm.test.ts`、`apps/web/src/App.tsx`
+- P1-6/7 与 P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
