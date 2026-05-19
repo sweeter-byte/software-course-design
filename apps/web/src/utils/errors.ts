@@ -1,3 +1,5 @@
+import type { ValidationIssue } from '../api'
+
 const friendlyMessages: Record<string, string> = {
   invalid_credentials: '手机号或密码不正确，请重新输入。',
   verification_code_not_found: '请先获取验证码。',
@@ -19,11 +21,89 @@ const friendlyMessages: Record<string, string> = {
   internal_server_error: '系统暂时繁忙，请稍后再试。',
 }
 
-export function friendlyErrorMessage(message: string) {
+const fieldLabels: Record<string, string> = {
+  phone: '手机号',
+  password: '密码',
+  confirmPassword: '确认密码',
+  newPassword: '新密码',
+  oldPassword: '原密码',
+  username: '用户名',
+  realName: '姓名',
+  studentId: '学号',
+  studentNo: '学号',
+  verificationCode: '验证码',
+  newVerificationCode: '新手机号验证码',
+  oldVerificationCode: '原手机号验证码',
+  newPhone: '新手机号',
+  courseCode: '课程代码',
+  courseName: '课程名称',
+  teacherId: '授课教师',
+  semester: '学期',
+  location: '上课地点',
+  scheduleText: '上课时间',
+  capacity: '容量',
+  startDate: '开始日期',
+  endDate: '结束日期',
+  description: '简介',
+  title: '标题',
+  requirement: '要求',
+  startAt: '开始时间',
+  dueAt: '截止时间',
+  content: '内容',
+  kind: '类型',
+  dimension: '反馈维度',
+  score: '分数',
+  teacherFeedback: '教师评语',
+}
+
+function formatFieldPath(path: ValidationIssue['path']): string {
+  if (path.length === 0) {
+    return ''
+  }
+  const head = path[0]
+  if (typeof head === 'string' && fieldLabels[head]) {
+    return fieldLabels[head]
+  }
+  return path.map((segment) => String(segment)).join('.')
+}
+
+function formatValidationDetails(details: ValidationIssue[]): string | null {
+  if (details.length === 0) {
+    return null
+  }
+
+  const parts = details
+    .map((issue) => {
+      const label = formatFieldPath(issue.path)
+      const message = issue.message?.trim()
+
+      if (!message) {
+        return label || null
+      }
+
+      return label ? `${label}：${message}` : message
+    })
+    .filter((entry): entry is string => Boolean(entry))
+
+  if (parts.length === 0) {
+    return null
+  }
+
+  return `请检查填写内容：${parts.join('；')}。`
+}
+
+export function friendlyErrorMessage(message: string, details?: ValidationIssue[]) {
   const normalized = message.toLowerCase()
 
   if (normalized.includes('failed to fetch')) {
     return '当前无法连接系统服务，请确认后端服务已启动。'
+  }
+
+  if (normalized === 'validation_failed' && details && details.length > 0) {
+    const formatted = formatValidationDetails(details)
+    if (formatted) {
+      return formatted
+    }
   }
 
   return friendlyMessages[normalized] ?? '当前操作暂时无法完成，请稍后再试。'

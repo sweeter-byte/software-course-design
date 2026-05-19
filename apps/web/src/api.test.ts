@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { api } from './api'
+import { ApiError, api } from './api'
 
 describe('api client request headers', () => {
   afterEach(() => {
@@ -46,5 +46,40 @@ describe('api client request headers', () => {
     expect(url.searchParams.get('assignmentId')).toBe('assignment-1')
     expect(url.searchParams.get('status')).toBe('open')
     expect(init?.headers).toHaveProperty('Authorization', 'Bearer token')
+  })
+
+  it('surfaces validation details on the thrown ApiError', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () =>
+      new Response(
+        JSON.stringify({
+          success: false,
+          message: 'validation_failed',
+          error: {
+            code: 'VALIDATION_ERROR',
+            details: [
+              { path: ['phone'], message: '手机号格式不正确' },
+              { path: ['password'], message: '至少 8 位' },
+            ],
+          },
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await api.login('http://localhost:4100/api/v1', '13800000000', 'pwd')
+      throw new Error('expected ApiError')
+    } catch (error) {
+      expect(error).toBeInstanceOf(ApiError)
+      const apiError = error as ApiError
+      expect(apiError.message).toBe('validation_failed')
+      expect(apiError.statusCode).toBe(400)
+      expect(apiError.code).toBe('VALIDATION_ERROR')
+      expect(apiError.details).toEqual([
+        { path: ['phone'], message: '手机号格式不正确' },
+        { path: ['password'], message: '至少 8 位' },
+      ])
+    }
   })
 })

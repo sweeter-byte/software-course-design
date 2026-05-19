@@ -23,13 +23,17 @@
   "message": "validation_failed",
   "error": {
     "code": "VALIDATION_ERROR",
-    "details": []
+    "details": [
+      { "path": ["phone"], "message": "手机号格式不正确" }
+    ]
   },
   "meta": {
     "requestId": "req_xxx"
   }
 }
 ```
+
+`error.details` 由 Zod 校验产生，每项含 `path`（字段路径）与 `message`（中文文案）。Web 客户端会将其与字段中文标签拼接展示在通知条上，便于排错。
 
 ## 1. 认证与账号
 

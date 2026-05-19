@@ -109,7 +109,7 @@ const summaryLabels: Record<string, string> = {
 
 function extractErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message)
+    return friendlyErrorMessage(error.message, error.details)
   }
 
   if (error instanceof Error) {

@@ -19,13 +19,27 @@ type RequestOptions = {
   body?: unknown
 }
 
+export type ValidationIssue = {
+  path: Array<string | number>
+  message: string
+  code?: string
+}
+
 export class ApiError extends Error {
   statusCode: number
+  code?: string
+  details?: ValidationIssue[]
 
-  constructor(message: string, statusCode: number) {
+  constructor(
+    message: string,
+    statusCode: number,
+    options?: { code?: string; details?: ValidationIssue[] },
+  ) {
     super(message)
     this.name = 'ApiError'
     this.statusCode = statusCode
+    this.code = options?.code
+    this.details = options?.details
   }
 }
 
@@ -43,7 +57,18 @@ async function requestJson<T>(baseUrl: string, path: string, options: RequestOpt
   const payload = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new ApiError(payload.message ?? 'request_failed', response.status)
+    const rawDetails = payload?.error?.details
+    const details = Array.isArray(rawDetails)
+      ? (rawDetails.filter(
+          (item): item is ValidationIssue =>
+            typeof item === 'object' && item !== null && Array.isArray((item as ValidationIssue).path),
+        ) as ValidationIssue[])
+      : undefined
+
+    throw new ApiError(payload.message ?? 'request_failed', response.status, {
+      code: typeof payload?.error?.code === 'string' ? payload.error.code : undefined,
+      details,
+    })
   }
 
   return payload.data as T

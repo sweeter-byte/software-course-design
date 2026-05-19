@@ -21,4 +21,28 @@ describe('friendlyErrorMessage', () => {
   it('keeps service connection failures actionable', () => {
     expect(friendlyErrorMessage('Failed to fetch')).toBe('当前无法连接系统服务，请确认后端服务已启动。')
   })
+
+  it('formats validation_failed details with Chinese field labels', () => {
+    const message = friendlyErrorMessage('validation_failed', [
+      { path: ['phone'], message: '手机号格式不正确' },
+      { path: ['password'], message: '至少 8 位且包含大小写字母与数字' },
+    ])
+
+    expect(message).toBe(
+      '请检查填写内容：手机号：手机号格式不正确；密码：至少 8 位且包含大小写字母与数字。',
+    )
+  })
+
+  it('falls back to the generic prompt when validation_failed has no details', () => {
+    expect(friendlyErrorMessage('validation_failed')).toBe('请检查填写内容后再提交。')
+    expect(friendlyErrorMessage('validation_failed', [])).toBe('请检查填写内容后再提交。')
+  })
+
+  it('keeps raw path segments when no Chinese label is registered', () => {
+    const message = friendlyErrorMessage('validation_failed', [
+      { path: ['address', 'city'], message: '不能为空' },
+    ])
+
+    expect(message).toBe('请检查填写内容：address.city：不能为空。')
+  })
 })
