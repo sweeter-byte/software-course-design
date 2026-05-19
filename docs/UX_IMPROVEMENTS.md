@@ -3,7 +3,7 @@
 本文档记录针对系统验收期的可用性 / 完整性改进项，按优先级分为 P0 / P1 / P2 三个梯队：
 
 - **P0** — 已完成（截至 2026-05-19）。已并入 `main` 分支。
-- **P1** — 部分完成。P1-4 / P1-5 已完成（2026-05-19），P1-6/7 待办。
+- **P1** — 部分完成。P1-4 / P1-5 / P1-6 已完成（2026-05-19），P1-7 待办。
 - **P2** — 待办，架构与可扩展性优化。
 
 用途：
@@ -15,8 +15,8 @@
 ## 当前基线（参考点）
 
 - 分支：`main`
-- 最近提交：`3fa8dc3 feat(web): require confirmation for destructive role actions`（前置：`c3568ef docs: record P1-4 toast queue commit hash in UX tracker`）
-- 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 64 通过 / 15 文件（含 P1-4 新增的 `useNotifications` 8 用例与 P1-5 新增的 `confirmDestructive` 3 用例）；`npm run typecheck` 全绿；`npm run lint` 全绿。
+- 最近提交：`ebb56e5 feat(web): add HTML5 native validation to forms`（前置：`3f3c1b6 docs: record P1-5 destructive confirmation commit in UX tracker`）
+- 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 64 通过 / 15 文件（含 P1-4 新增的 `useNotifications` 8 用例与 P1-5 新增的 `confirmDestructive` 3 用例；P1-6 未新增专项测试，原有 15 个测试文件覆盖了带新增 `required` / `minLength` 的提交路径）；`npm run typecheck` 全绿；`npm run lint` 全绿。
 - 关键命令（沿用 `CLAUDE.md`）：
   ```bash
   npm run dev                # server + web together
@@ -71,6 +71,18 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## P1 · 已完成
 
+### P1-6 · 表单加 HTML5 原生校验
+
+| 项 | 内容 |
+| --- | --- |
+| 提交 | `ebb56e5 feat(web): add HTML5 native validation to forms` |
+| 背景 | 注册、改密、改手机、创建课程、发布作业、提交答案、批改等表单的 `<input>` / `<textarea>` 之前都没有 `required` / `minLength` 等属性，依赖后端 Zod 兜底。P0-3 之后字段错误虽已显示，但用户仍要等一次网络往返才知道问题。 |
+| 前端改动 | 共改 10 个文件：`apps/web/src/features/auth/{LoginForm,StudentRegisterForm,ResetPasswordForm}.tsx`、`apps/web/src/features/account/{PasswordForm,PhoneChangeForm,ProfileForm}.tsx`、`apps/web/src/features/assignments/StudentAssignmentWorkspace.tsx`、`apps/web/src/features/teacher/{TeacherTaskWorkspace,FeedbackThreadList}.tsx`、`apps/web/src/App.tsx`（课程创建 / 作业发布 / 课程反馈 / 互动 / 教师回复 5 处表单）。统一加上：① `required` —— 与 Zod schema 必填字段对齐；② `minLength={N}` —— N 取 `packages/shared/src/index.ts` 中相应 `.min(N)`（手机号 11、密码 6、用户名/真实姓名 2、验证码 4、学号 4、作业 / 课程 / 反馈 / 回复内容 2 等）；③ 字段语义：手机号 `type="tel"` + `inputMode="numeric"` + `pattern="\\d{11}"`，验证码 `inputMode="numeric"`，邮箱 `type="email"`，分数 `type="number" min={0} max={100}`，容量 `type="number" min={1} step={1}`，开课/结课 `type="date"`；④ 显式 `htmlFor` + `id` 绑定 label（保留原 `<label>` 包裹结构，因此 `getByLabelText` 测试不受影响）；⑤ `title` 提示文案（浏览器原生 tooltip）。 |
+| 文档 | 本文件（基线提交 / 测试计数 / P1 状态 / 速查段）。 |
+| 测试 | 未新增专项单测：HTML5 原生校验由浏览器实现，与组件 props/state 无直接耦合，新增的 `required` / `minLength` 在既有提交路径用例（`LoginShell.test.tsx`、`AccountSection.test.tsx`、`StudentAssignmentWorkspace.test.tsx`、`TeacherTaskWorkspace.test.tsx` 等）中以「值满足约束」的方式被间接覆盖。`npm run test` 全绿（后端 48/10；Web 64/15；dev-runtime parser 测试通过）；`npm run typecheck` 全绿；`npm run lint` 全绿。 |
+| 偏离 | 路线图建议的 `pattern="^1[3-9]\\d{9}$"`（手机号）、`minLength={8}` + 复杂度（密码）、`pattern="^\\d{6}$"`（验证码）、`pattern="^\\d{6,}$"`（学号）均**严格于** Zod 实际约束（`min(11)` / `min(6)` / `min(4)` / `min(4)`，无 regex）；为避免「前端通过但后端报错」反向出现「前端拒绝但后端可接受」，本次仅对手机号补一个保守的 `pattern="\\d{11}"`（演示账号 `13900139000` / `13700137000` 通过），其余字段坚持仅对齐 Zod 的 `.min`。后续若收紧后端 schema，再同步加严 HTML 属性即可。账号资料表单（`profileUpdateSchema` 全部可选）只加 `minLength`、`type="email"`，不加 `required`。 |
+| 验收准则 | 1. 登录页输入手机号 `123` 后按提交，浏览器原生 tooltip 报「请输入 11 位手机号」且不发起请求；2. 注册页留空必填项后按「完成注册」，第一个空字段聚焦并显示原生提示；3. 教师批改时若分数留空，提交按钮触发原生校验，不会发起请求；4. 既有键盘 Tab 顺序与屏读 label 读取（通过 `htmlFor` / `id` 显式绑定）保持正常。 |
+
 ### P1-5 · 破坏性操作统一二次确认
 
 | 项 | 内容 |
@@ -99,16 +111,6 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 ## P1 · 待办（影响体验）
 
 > P1 实施建议每项独立 commit，便于代码审核。预计每项 1–2 小时工作量。
-
-### P1-6 · 表单加 HTML5 原生校验
-
-| 项 | 内容 |
-| --- | --- |
-| 现状 | 注册、改密、改手机、创建课程等表单的 `<input>` 都没有 `required` / `pattern` / `minLength` 等属性，依赖服务端 Zod 兜底。后端 400 → 经 P0-3 已能展示字段错误，但用户依然要等一次网络往返。 |
-| 目标 | 常见错误（手机号格式、密码长度、必填）在浏览器侧立即提示，减少无谓的请求。 |
-| 建议实施 | 1. 优先改动入口：`apps/web/src/features/auth/LoginForm.tsx`、`StudentRegisterForm.tsx`、`ResetPasswordForm.tsx`；`apps/web/src/features/account/{PasswordForm,PhoneChangeForm,ProfileForm}.tsx`；`apps/web/src/App.tsx` 中的课程/作业表单。2. 字段约束建议（与 `packages/shared/src/index.ts` 中的 Zod 保持一致）：手机号 `pattern="^1[3-9]\\d{9}$"`、密码 `minLength={8}` + `pattern` 匹配大小写+数字、验证码 `pattern="^\\d{6}$"`、学号 `pattern="^\\d{6,}$"` 等。3. 同时为 `<label>` 绑定 `htmlFor` / `id` 以提升可访问性。 |
-| 验收准则 | 在登录页输入 `123`，浏览器原生 tooltip 报错且不发起请求；同时键盘 Tab 顺序正确、屏读能读出 label。 |
-| 风险 | 须与后端 Zod 校验完全一致，否则会出现「前端通过但后端报错」的迷惑场景；改动前对照 `packages/shared/src/index.ts` 中各 schema 的 `.regex/.min/.max` 调用。 |
 
 ### P1-7 · 教务员补「用户管理」最小集
 
@@ -160,7 +162,7 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## 给审核者的速查
 
-- P0、P1-4、P1-5 改动均带新增测试，可通过 `npm run test` 与 `npm run typecheck` 整体验证。
+- P0、P1-4、P1-5 改动均带新增测试；P1-6 通过既有测试覆盖。`npm run test` 与 `npm run typecheck` 可整体验证。
 - P0 涉及文件（按重要性）：
   - 后端：`apps/server/src/modules/courses/routes.ts`、`apps/server/tests/enrollments.integration.test.ts`
   - 前端：`apps/web/src/api.ts`、`apps/web/src/utils/errors.ts`、`apps/web/src/App.tsx`、`apps/web/src/domain.ts`
@@ -169,4 +171,6 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
   - 前端：`apps/web/src/hooks/useNotifications.ts`、`apps/web/src/hooks/useNotifications.test.ts`、`apps/web/src/components/notifications/NotificationStack.tsx`、`apps/web/src/App.tsx`、`apps/web/src/App.css`、`apps/web/src/features/auth/LoginShell.tsx`、`apps/web/src/features/auth/LoginShell.test.tsx`
 - P1-5 涉及文件：
   - 前端：`apps/web/src/utils/confirm.ts`、`apps/web/src/utils/confirm.test.ts`、`apps/web/src/App.tsx`
-- P1-6/7 与 P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
+- P1-6 涉及文件：
+  - 前端：`apps/web/src/features/auth/{LoginForm,StudentRegisterForm,ResetPasswordForm}.tsx`、`apps/web/src/features/account/{PasswordForm,PhoneChangeForm,ProfileForm}.tsx`、`apps/web/src/features/assignments/StudentAssignmentWorkspace.tsx`、`apps/web/src/features/teacher/{TeacherTaskWorkspace,FeedbackThreadList}.tsx`、`apps/web/src/App.tsx`
+- P1-7 与 P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
