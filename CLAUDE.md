@@ -89,7 +89,7 @@ Schema (single source: `apps/server/src/lib/db/schema.ts`):
 
 ### Web app
 
-- Single-bundle SPA: `apps/web/src/App.tsx` is ~2.5k lines and contains all role workspaces (`dashboard | courses | courseAdmin | assignments | grading | courseFeedbacks | interaction | account`). Be deliberate when adding features here — prefer extending the existing view state machine over inventing parallel routing.
+- Single-bundle SPA: `apps/web/src/App.tsx` is ~2.3k lines and contains all role workspaces (`dashboard | courses | courseAdmin | assignments | grading | courseFeedbacks | interaction | account`). Be deliberate when adding features here — prefer extending the existing view state machine over inventing parallel routing.
 - Data layer: TanStack Query + the `api` object in `apps/web/src/api.ts`. The API base URL is configured at runtime (default `http://localhost:4100/api/v1`); persisted bits are read by `runtime-state.ts`.
 - React/ReactDOM are deduped via Vite aliases in `apps/web/vite.config.ts` to survive workspace hoisting quirks — don't remove the `createRequire` resolve block unless you know why it's there.
 

@@ -21,13 +21,6 @@ import type {
 import { LoginShell, type AuthMode } from './features/auth/LoginShell'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
-
-const AccountSection = lazy(() =>
-  import('./features/account/AccountSection').then((m) => ({ default: m.AccountSection })),
-)
-const UserAdminSection = lazy(() =>
-  import('./features/officer/UserAdminSection').then((m) => ({ default: m.UserAdminSection })),
-)
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
@@ -35,6 +28,13 @@ import { readInitialRuntimeState } from './runtime-state'
 import { confirmDestructive } from './utils/confirm'
 import { formatDateTimeForDisplay, fromDateTimeLocalValue, toDateTimeLocalValue } from './utils/date'
 import { friendlyErrorMessage } from './utils/errors'
+
+const AccountSection = lazy(() =>
+  import('./features/account/AccountSection').then((m) => ({ default: m.AccountSection })),
+)
+const UserAdminSection = lazy(() =>
+  import('./features/officer/UserAdminSection').then((m) => ({ default: m.UserAdminSection })),
+)
 
 const DEFAULT_API_BASE_URL = 'http://localhost:4100/api/v1'
 
@@ -329,7 +329,7 @@ function App() {
     currentRole === 'teacher'
       ? visibleView === 'grading'
       : currentRole === 'student' && visibleView === 'assignments'
-  const showInteraction = currentRole !== 'teacher' && visibleView === 'interaction'
+  const showInteraction = currentRole === 'student' && visibleView === 'interaction'
   const showCurrentProgress =
     visibleView !== 'account' && visibleView !== 'courseAdmin' && visibleView !== 'userAdmin'
   const showFirstGrid = showAccount || showUserAdmin || showCoursesList || showCourseAdmin || showCourseParticipation
