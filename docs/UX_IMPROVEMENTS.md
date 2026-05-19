@@ -5,6 +5,7 @@
 - **P0** — 已完成（截至 2026-05-19）。已并入 `main` 分支。
 - **P1** — 已全部完成（截至 2026-05-19，P1-4 / P1-5 / P1-6 / P1-7）。
 - **P2** — 已全部完成（截至 2026-05-19，P2-8 / P2-9 / P2-10）。
+- **P2-11** — P2-10 审核反馈的修复（截至 2026-05-19）。
 
 用途：
 1. 新会话延续工作时，可直接基于本文件查阅已完成与待办。
@@ -15,8 +16,13 @@
 ## 当前基线（参考点）
 
 - 分支：`main`
-- 最近提交：`d63c313 feat(web): render workspace views conditionally and lazy-load admin sections`（前置：`34e3090 feat(web): collapse mobile sidebar into a drawer`）
-- 测试状态：后端 vitest 52 通过 / 11 文件；Web vitest 73 通过 / 17 文件；`npm run typecheck` 全绿；`npm run lint` 全绿；`npm run build --workspace @course/web` 通过。P2-10 改用条件渲染 + `React.lazy` 拆出 `AccountSection` / `UserAdminSection` 两个独立 chunk（gzip 1.48 kB / 1.13 kB），主包从 gzip 104.86 kB 降至 103.28 kB（-1.58 kB）。
+- 最近提交（最新在前；本文件本身亦在 main 上）：
+  - 本 docs commit（P2-11 tracker 更新）紧随 `1fcbdde refactor(web): apply P2-10 audit fixes and add App routing tests` —— 准确 SHA 以 `git log` 为准。
+  - `1fcbdde refactor(web): apply P2-10 audit fixes and add App routing tests` —— P2-11 审核修复主体（lazy 顺序 / `showInteraction` 收紧 / `App.test.tsx` 新增 / `CLAUDE.md` 行数）。
+  - `7bfc6ad docs: record P2-10 conditional rendering commit in UX tracker` —— P2-10 追加本 tracker 条目（审核时的 HEAD）。
+  - `d63c313 feat(web): render workspace views conditionally and lazy-load admin sections` —— P2-10 条件渲染 + lazy 实现。
+  - `34e3090 feat(web): collapse mobile sidebar into a drawer` —— P2-9。
+- 测试状态：后端 vitest 52 通过 / 11 文件；Web vitest 75 通过 / 18 文件（P2-11 新增 `apps/web/src/App.test.tsx` 2 用例）；`npm run typecheck` 全绿；`npm run lint` 全绿；`npm run build --workspace @course/web` 通过。P2-10 改用条件渲染 + `React.lazy` 拆出 `AccountSection` / `UserAdminSection` 两个独立 chunk（gzip 1.48 kB / 1.13 kB），主包从 gzip 104.86 kB 降至 103.28 kB（-1.58 kB）。
 - 关键命令（沿用 `CLAUDE.md`）：
   ```bash
   npm run dev                # server + web together
@@ -123,6 +129,19 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## P2 · 已完成
 
+### P2-11 · P2-10 审核反馈修复
+
+| 项 | 内容 |
+| --- | --- |
+| 提交 | `1fcbdde refactor(web): apply P2-10 audit fixes and add App routing tests`（实现 + 测试 + CLAUDE.md），随后本 docs commit 落定 tracker。 |
+| 背景 | 对 P2-10 进行外部审核（codex）后，收到 2 个 blocker 与 3 个 nit。本条目记录全部修复。 |
+| Blocker 修复 | ① `docs/UX_IMPROVEMENTS.md` 的「当前基线」段把 d63c313 单笔提交描述改为列出最近 3 笔（含本 tracker 提交 7bfc6ad），并标明 P2-11 修复后会再追加一笔——基线描述与仓库现实保持一致。② 删除 P2-10 表格中"既有 `UserAdminSection` 测试覆盖渲染契约"的不实陈述：仓库内并无 `UserAdminSection.test.tsx`；改写为「`UserAdminSection` 暂无独立单测文件，由后端集成测试覆盖启停链路」。 |
+| Nit 修复 | ① `apps/web/src/App.tsx`：把 `lazy(...)` 声明从 import 块中间移到所有 import 之后，避免语义混合（行为不变）。② `apps/web/src/App.tsx`：`showInteraction` 由 `currentRole !== 'teacher' && visibleView === 'interaction'` 改为 `currentRole === 'student' && visibleView === 'interaction'`——白名单写法更稳健，未来若给教务员加 interaction 入口也不会误进学生互动视图。③ `CLAUDE.md` 把「`apps/web/src/App.tsx` is ~2.5k lines」改为「~2.3k lines」，与实际 2281 行对齐。 |
+| 测试覆盖 | 新增 `apps/web/src/App.test.tsx`（2 用例）：① 携带 `student` session 渲染 `/student/account` —— 断言出现「账号维护」三级标题，且「课程列表 / 当前进度 / 互动交流 / 作业安排 / 课程反馈」均不挂载，验证条件渲染拓扑正确。② 携带 `teacher` session 渲染 `/teacher/interaction` —— `interaction` 已从教师导航移除，断言 App 自动回落到「课程列表」（教师 dashboard），且「互动交流 / 账号维护」均不挂载。两用例都用 `vi.mock('@tanstack/react-query')` 把 `useQuery` / `useMutation` / `useQueryClient` 替换为 loading/idle 桩，避免 jsdom 下需要真实网络与 hoist 后的 react 双实例问题（root 的 `@tanstack/react-query` 与 `apps/web/node_modules/react` 解析到不同 react，触发 "Invalid hook call"）。 |
+| 验证命令 | `npm run typecheck` / `npm run lint` / `npm run test`（后端 52/11；Web 75/18，新增 2 用例；dev-runtime parser 通过）；`npm run build --workspace @course/web`（gzip 主包 103.28 kB 与 P2-10 一致，未引入新依赖）。 |
+| 偏离 | 审核架构观察段提到的「`React.lazy` 桥接 named export 正确 / 不需要 `useMemo` viewLoadingFallback / 不建议把后端 PATCH /DELETE responses 标 unused」等无需改动；P2-10 决策保持。审核建议补的另一可选用例「`/teacher/interaction` 回落 dashboard」已落实为 App.test.tsx 第二个用例。 |
+| 验收准则 | 1. `npm run typecheck` / `npm run lint` 全绿。2. `npm run test --workspace @course/web` 通过且 `App routing > renders only the account section on /student/account` 与 `App routing > redirects /teacher/interaction back to the teacher dashboard` 两条新用例通过。3. `npm run build --workspace @course/web` gzip 主包仍 ≈ 103 kB。4. `docs/UX_IMPROVEMENTS.md` 不再引用不存在的 `UserAdminSection.test.tsx`；基线段列出三笔提交并标注 P2-11 后续追加。5. `apps/web/src/App.tsx` 中 lazy 声明位于全部 import 之后；`showInteraction` 显式判断 `currentRole === 'student'`。6. `CLAUDE.md` 中 App.tsx 行数描述为 "~2.3k"。 |
+
 ### P2-10 · 按路由条件渲染替换 `view-hidden`
 
 | 项 | 内容 |
@@ -133,7 +152,7 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 | 前端改动 | `apps/web/src/App.tsx`：① 顶部 import 新增 `Suspense` / `lazy`；把 `AccountSection` / `UserAdminSection` 从静态 import 改为 `lazy(() => import(...).then((m) => ({ default: m.X })))`，让 Vite 拆出独立 chunk。② 组件内派生一组视图布尔旗（`showHero / showAccount / showUserAdmin / showCoursesList / showCourseAdmin / showCourseParticipation / showCourseFeedbacks / showAssignmentsList / showAssignmentDetail / showInteraction / showCurrentProgress`），以及它们的并集 `showFirstGrid / showSecondGrid / showThirdGrid`；同时定义 `viewLoadingFallback = <StatePanel … />` 给 `<Suspense>` 用。③ 把 `dashboard-layout` 内的 hero-banner / hero-metrics / summary-grid 三块 `view-hidden` 班装条件 className 改为 `{showHero ? (<>…</>) : null}` 统一包裹；三个 `workspace-grid` 容器整体加 `{showXxxGrid ? <div className="workspace-grid">…</div> : null}`，避免渲染空 grid；其中每个 `<SectionCard>` 再各自加 `{showXxx ? (<SectionCard className="wide-card">…</SectionCard>) : null}`，删除原 `className={... ? 'wide-card' : 'view-hidden'}` / `className={... ? undefined : 'view-hidden'}` 写法（涉及账号维护、用户管理、课程列表、课程信息维护、课程参与 / 教学安排、课程反馈、作业安排、教师任务工作台 / 我的作业、互动交流、当前进度共 10 张卡）。lazy 的两张卡 `AccountSection` / `UserAdminSection` 在 SectionCard 内用 `<Suspense fallback={viewLoadingFallback}>` 包裹一次。④ `currentRole === 'officer' ? <courseAdmin> : <courseParticipation>` 的二选一三元被拆成两个独立 `{showCourseAdmin ? … : null}{showCourseParticipation ? … : null}`。⑤ 删除一段 dead code：原「互动交流」SectionCard 在 CSS 隐藏的同时仍写有 `currentRole === 'teacher' ? <载入/修改/删除回复按钮 + 教师回复表单>` 分支，但 `showInteraction = currentRole !== 'teacher' && visibleView === 'interaction'` 让 TS 推断出该分支不可达；该 UI 在 `roleNavigation` 中也从未给教师挂入口，因此连同只服务它的 `updateResponseMutation` / `deleteResponseMutation` 一并删除（`api.updateResponse` / `api.deleteResponse` 保留在 `api.ts`，便于后续重新接入教师端 UI 时复用）。`apps/web/src/App.css`：删除 `.section-card.view-hidden, .view-hidden { display: none !important; }` 这条 utility 类；把两处 `:has(.section-card:nth-child(3):not(.view-hidden))` 的 `:not(.view-hidden)` 部分去掉——由于卡片现在要么不挂载、要么挂载即可见，`:not(.view-hidden)` 已无意义。 |
 | 行为对比 | 切到非 `dashboard` 视图时，hero 区与对应视图无关的 SectionCard 不再产生 DOM 节点，TanStack Query 的 `enabled` 控制保留原值不变，因此请求行为与 P2-9 完全一致。视图来回切换时，React Query 缓存继续命中（`queryClient` 在 App 之外创建），切换不会因为子树卸载而重新发起请求。account / userAdmin 首次进入会触发对应 lazy chunk 加载，`<Suspense>` 落到 `StatePanel` 占位（dev 模式可能瞬时可见 < 50ms，prod gzip 1.48 / 1.13 kB 几乎不可见）。 |
 | 文档 | 本文件（基线提交占位 + 测试计数 + P2 状态汇总；P2-10 从「待办」迁入「已完成」并新增「速查段」条目）。 |
-| 测试 | 未新增前端单测：① `view-hidden` 移除属于纯渲染拓扑变化，没有可独立 mount 的子组件以覆盖；② `lazy` + `Suspense` 在 jsdom 下需要手动等待 microtask，价值低于直接跑 `vite build` 验证 chunk 拆分；③ 既有 `LoginShell` / `AccountSection` / `UserAdminSection` / `StudentAssignmentWorkspace` / `TeacherTaskWorkspace` / `useNotifications` / `useMediaQuery` / `SidebarDrawer` 等 73 个 web vitest 用例继续覆盖渲染契约。`npm run test` 全绿（后端 52/11；Web 73/17；dev-runtime parser 通过）；`npm run typecheck` / `npm run lint` 全绿。`vite build` 通过：主包 gzip 103.28 kB（较 P2-9 基线 104.86 kB **-1.58 kB**）；新增两个独立 chunk `AccountSection` gzip 1.48 kB、`UserAdminSection` gzip 1.13 kB——这两个 chunk 只在用户进入对应视图时按需加载。 |
+| 测试 | 未新增前端单测：① `view-hidden` 移除属于纯渲染拓扑变化，没有可独立 mount 的子组件以覆盖；② `lazy` + `Suspense` 在 jsdom 下需要手动等待 microtask，价值低于直接跑 `vite build` 验证 chunk 拆分；③ 既有 `LoginShell` / `AccountSection` / `StudentAssignmentWorkspace` / `TeacherTaskWorkspace` / `useNotifications` / `useMediaQuery` / `SidebarDrawer` 等 73 个 web vitest 用例继续覆盖渲染契约（`UserAdminSection` 暂无独立单测文件，由后端集成测试覆盖启停链路）。`npm run test` 全绿（后端 52/11；Web 73/17；dev-runtime parser 通过）；`npm run typecheck` / `npm run lint` 全绿。`vite build` 通过：主包 gzip 103.28 kB（较 P2-9 基线 104.86 kB **-1.58 kB**）；新增两个独立 chunk `AccountSection` gzip 1.48 kB、`UserAdminSection` gzip 1.13 kB——这两个 chunk 只在用户进入对应视图时按需加载。 |
 | 偏离 | 路线图建议 ① 用 `<Route element={<DashboardView />} />` 嵌套路由替代 `view-hidden`、② 每个 role 拆一个 chunk、③ 验证 React Query 缓存。本次实现：① 不引入嵌套路由——P2-8 的 `visibleView = parseRouteView(location.pathname, currentRole)` 派生模型与 `<Routes><Route /></Routes>` 是两种风格，混用会让 `App.tsx` 同时持有两套视图状态机；条件渲染保持单一来源（`visibleView`）。② 不按 role 拆 chunk——`student` / `teacher` / `officer` 共用大部分卡片（课程列表、作业安排、课程反馈、互动），按 role 拆反而要重复打包；按「重型且独立可达的视图」拆 `AccountSection` / `UserAdminSection` 收益更纯净。`courseAdmin` 表单仍内联在 `App.tsx`（约 220 行 JSX），抽出独立组件并 lazy 化属于「视图按文件拆分」的下一阶段。③ React Query 缓存验证：`queryClient` 在 `main.tsx` 创建，`apps/web/src/App.tsx` 内无 `removeQueries` / `resetQueries` 调用，视图切换只会让子树 unmount，`useQuery` 的缓存不会因 hook 卸载被清空（TanStack Query 默认 `gcTime: 5min`），切换体验与 P2-9 一致。 |
 | 验收准则 | 1. 在浏览器 DevTools Elements 面板中切到 `/student/account` 时，`.dashboard-layout` 内只剩账号维护 SectionCard，不再出现被 `display:none` 隐藏的 dashboard hero / 课程列表 / 作业安排 / 互动 等节点。2. 同一 React Query 缓存命中：从 `/student/dashboard` 切到 `/student/account` 再切回，dashboard 数据无需重发请求即可显示。3. 首次进入 `account / userAdmin` 视图时，Network 面板出现独立的 `AccountSection-*.js` / `UserAdminSection-*.js` 请求；其余视图不触发这两个 chunk。4. `vite build` 产物分包符合预期：主 chunk gzip ≈ 103 kB，`AccountSection` 与 `UserAdminSection` 各自 gzip < 2 kB。5. 73 个 web vitest / 52 个 server vitest 用例全部通过，`npm run typecheck` / `npm run lint` / `vite build` 通过。 |
 
@@ -192,3 +211,6 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
   - 前端：`apps/web/src/hooks/useMediaQuery.ts`、`apps/web/src/hooks/useMediaQuery.test.ts`、`apps/web/src/components/layout/SidebarDrawer.tsx`、`apps/web/src/components/layout/SidebarDrawer.test.tsx`、`apps/web/src/App.tsx`、`apps/web/src/App.css`
 - P2-10 涉及文件：
   - 前端：`apps/web/src/App.tsx`（条件渲染替换 `view-hidden`、`lazy` import `AccountSection` / `UserAdminSection`、删除互动视图中不可达的 `updateResponseMutation` / `deleteResponseMutation` 及对应教师按钮）、`apps/web/src/App.css`（删除 `.view-hidden` utility、`:has(...:not(.view-hidden))` 简化为 `:has(.section-card:nth-child(3))`）
+- P2-11 涉及文件：
+  - 前端：`apps/web/src/App.tsx`（lazy 声明移到 import 块之后；`showInteraction` 显式判断 `currentRole === 'student'`）、`apps/web/src/App.test.tsx`（新增 2 用例覆盖 `/student/account` 条件渲染与 `/teacher/interaction` 回落）
+  - 文档：`docs/UX_IMPROVEMENTS.md`（基线段重写、删除 UserAdminSection 不实测试覆盖陈述、新增本 P2-11 条目）、`CLAUDE.md`（App.tsx 行数 ~2.5k → ~2.3k）
