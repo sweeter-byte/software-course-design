@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
 
+import { NotificationStack } from '../../components/notifications/NotificationStack'
+import type { Notification } from '../../hooks/useNotifications'
+
 import { LoginForm, type LoginFormState } from './LoginForm'
 import {
   ResetPasswordForm,
@@ -14,7 +17,8 @@ export type AuthMode = 'login' | 'register' | 'reset'
 
 type LoginShellProps = {
   authMode: AuthMode
-  notice: string
+  notifications: Notification[]
+  onDismissNotification: (id: number) => void
   supportNotes: string[]
   guideNotes: string[]
   loginForm: LoginFormState
@@ -129,7 +133,11 @@ export function LoginShell(props: LoginShellProps) {
             </aside>
 
             <div className="login-form-column">
-              <div className="notice-bar login-notice">{props.notice}</div>
+              <NotificationStack
+                notifications={props.notifications}
+                onDismiss={props.onDismissNotification}
+                className="login-notification-stack"
+              />
 
               <div className="login-panel">
                 <div className="login-panel-head">

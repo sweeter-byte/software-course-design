@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import './App.css'
 import { ApiError, api, type SessionPayload } from './api'
 import { WorkspaceContextBar } from './components/layout/WorkspaceContextBar'
+import { NotificationStack } from './components/notifications/NotificationStack'
 import { StatePanel } from './components/ui/StatePanel'
 import { createDefaultAssignmentDates } from './demo-defaults'
 import type {
@@ -18,6 +19,7 @@ import { AccountSection } from './features/account/AccountSection'
 import { LoginShell, type AuthMode } from './features/auth/LoginShell'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
+import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
 import { readInitialRuntimeState } from './runtime-state'
 import { formatDateTimeForDisplay, fromDateTimeLocalValue, toDateTimeLocalValue } from './utils/date'
@@ -151,11 +153,16 @@ function App() {
   const [session, setSession] = useState<SessionPayload | null>(initialRuntimeState.session)
   const [authMode, setAuthMode] = useState<AuthMode>('login')
   const [activeView, setActiveView] = useState<WorkspaceView>('dashboard')
-  const [notice, setNotice] = useState(
-    initialRuntimeState.recoveredInvalidSession
-      ? '登录状态已更新，请重新登录。'
-      : '欢迎使用课程互动平台。',
-  )
+  const { notifications, notify, dismiss: dismissNotification } = useNotifications()
+  useEffect(() => {
+    const id = notify({
+      type: initialRuntimeState.recoveredInvalidSession ? 'error' : 'info',
+      content: initialRuntimeState.recoveredInvalidSession
+        ? '登录状态已更新，请重新登录。'
+        : '欢迎使用课程互动平台。',
+    })
+    return () => dismissNotification(id)
+  }, [initialRuntimeState.recoveredInvalidSession, notify, dismissNotification])
   const [loginForm, setLoginForm] = useState({ phone: '', password: '' })
   const [registerForm, setRegisterForm] = useState({
     phone: '',
@@ -397,14 +404,17 @@ function App() {
         ...current,
         oldPhone: payload.user.phone,
       }))
-      setNotice(`${roleLabels[payload.user.role]} ${payload.user.realName}，欢迎回来。`)
+      notify({
+        type: 'success',
+        content: `${roleLabels[payload.user.role]} ${payload.user.realName}，欢迎回来。`,
+      })
       startTransition(() => {
         setActiveView('dashboard')
         resetWorkspaceSelection()
       })
     },
     onError: (error) => {
-      setNotice(extractErrorMessage(error))
+      notify({ type: 'error', content: extractErrorMessage(error) })
     },
   })
 
@@ -416,12 +426,12 @@ function App() {
           ...current,
           verificationCode: payload.previewCode ?? '',
         }))
-        setNotice('验证码已自动填入，可继续完成注册。')
+        notify({ type: 'info', content: '验证码已自动填入，可继续完成注册。' })
       } else {
-        setNotice('验证码已发送，请注意查收。')
+        notify({ type: 'info', content: '验证码已发送，请注意查收。' })
       }
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const resetCodeMutation = useMutation({
@@ -431,15 +441,18 @@ function App() {
         ...current,
         verificationCode: payload.previewCode ?? current.verificationCode,
       }))
-      setNotice(payload.previewCode ? '重置验证码已自动填入。' : '重置验证码已发送。')
+      notify({
+        type: 'info',
+        content: payload.previewCode ? '重置验证码已自动填入。' : '重置验证码已发送。',
+      })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const resetPasswordMutation = useMutation({
     mutationFn: async () => api.resetPassword(apiBaseUrl, resetForm),
     onSuccess: () => {
-      setNotice('密码已重置，请使用新密码登录。')
+      notify({ type: 'success', content: '密码已重置，请使用新密码登录。' })
       setLoginForm({ phone: resetForm.phone, password: resetForm.newPassword })
       setResetForm({
         phone: '',
@@ -448,17 +461,17 @@ function App() {
         confirmPassword: '',
       })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const registerMutation = useMutation({
     mutationFn: async () => api.registerStudent(apiBaseUrl, registerForm),
     onSuccess: () => {
       setAuthMode('login')
-      setNotice('注册成功，请使用手机号和密码登录。')
+      notify({ type: 'success', content: '注册成功，请使用手机号和密码登录。' })
       setLoginForm({ phone: registerForm.phone, password: registerForm.password })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const updateProfileMutation = useMutation({
@@ -489,9 +502,9 @@ function App() {
             }
           : current,
       )
-      setNotice('个人资料已更新。')
+      notify({ type: 'success', content: '个人资料已更新。' })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const changePasswordMutation = useMutation({
@@ -505,9 +518,9 @@ function App() {
         newPassword: '',
         confirmPassword: '',
       })
-      setNotice('密码已修改，请妥善保管新密码。')
+      notify({ type: 'success', content: '密码已修改，请妥善保管新密码。' })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const phoneCodeMutation = useMutation({
@@ -522,9 +535,12 @@ function App() {
           ? { ...current, oldVerificationCode: previewCode ?? current.oldVerificationCode }
           : { ...current, newVerificationCode: previewCode ?? current.newVerificationCode },
       )
-      setNotice(`${target === 'old' ? '旧手机号' : '新手机号'}验证码已回填。`)
+      notify({
+        type: 'info',
+        content: `${target === 'old' ? '旧手机号' : '新手机号'}验证码已回填。`,
+      })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const changePhoneMutation = useMutation({
@@ -552,9 +568,9 @@ function App() {
         newPhone: '',
         newVerificationCode: '',
       })
-      setNotice('手机号已修改。')
+      notify({ type: 'success', content: '手机号已修改。' })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const logoutMutation = useMutation({
@@ -564,9 +580,9 @@ function App() {
     },
     onSuccess: () => {
       setSession(null)
-      setNotice('已退出当前账号。')
+      notify({ type: 'info', content: '已退出当前账号。' })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const cancelAccountMutation = useMutation({
@@ -576,9 +592,9 @@ function App() {
     },
     onSuccess: () => {
       setSession(null)
-      setNotice('账号已注销，后续需重新注册。')
+      notify({ type: 'info', content: '账号已注销，后续需重新注册。' })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const createCourseMutation = useMutation({
@@ -599,14 +615,17 @@ function App() {
     },
     onSuccess: (payload) => {
       if (!payload) return
-      setNotice(`课程《${String(payload.course.courseName)}》已创建。`)
+      notify({
+        type: 'success',
+        content: `课程《${String(payload.course.courseName)}》已创建。`,
+      })
       queryClient.invalidateQueries({ queryKey: ['courses'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       startTransition(() => {
         setSelectedCourseId(String(payload.course.id))
       })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const updateCourseMutation = useMutation({
@@ -619,10 +638,13 @@ function App() {
     },
     onSuccess: (payload) => {
       if (!payload) return
-      setNotice(`课程《${String(payload.course.courseName)}》已更新。`)
+      notify({
+        type: 'success',
+        content: `课程《${String(payload.course.courseName)}》已更新。`,
+      })
       queryClient.invalidateQueries({ queryKey: ['courses'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const deleteCourseMutation = useMutation({
@@ -631,14 +653,14 @@ function App() {
       return api.deleteCourse(apiBaseUrl, session.accessToken, selectedCourseId)
     },
     onSuccess: () => {
-      setNotice('课程已删除。')
+      notify({ type: 'success', content: '课程已删除。' })
       startTransition(() => {
         resetWorkspaceSelection()
       })
       queryClient.invalidateQueries({ queryKey: ['courses'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const enrollMutation = useMutation({
@@ -647,7 +669,7 @@ function App() {
       return api.enrollCourse(apiBaseUrl, session.accessToken, courseId)
     },
     onSuccess: (_, courseId) => {
-      setNotice('已加入课程，可以开始查看作业与学习内容。')
+      notify({ type: 'success', content: '已加入课程，可以开始查看作业与学习内容。' })
       queryClient.invalidateQueries({ queryKey: ['courses'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       startTransition(() => {
@@ -658,12 +680,12 @@ function App() {
       const message = extractErrorMessage(error)
 
       if (message.includes('ALREADY_ENROLLED') || message.includes('already_enrolled')) {
-        setNotice('你已加入该课程。')
+        notify({ type: 'info', content: '你已加入该课程。' })
         queryClient.invalidateQueries({ queryKey: ['courses'] })
         return
       }
 
-      setNotice(message)
+      notify({ type: 'error', content: message })
     },
   })
 
@@ -674,14 +696,17 @@ function App() {
     },
     onSuccess: (payload) => {
       if (!payload) return
-      setNotice(`作业《${String(payload.assignment.title)}》已发布。`)
+      notify({
+        type: 'success',
+        content: `作业《${String(payload.assignment.title)}》已发布。`,
+      })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       startTransition(() => {
         setSelectedAssignmentId(String(payload.assignment.id))
       })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const updateAssignmentMutation = useMutation({
@@ -691,10 +716,13 @@ function App() {
     },
     onSuccess: (payload) => {
       if (!payload) return
-      setNotice(`作业《${String(payload.assignment.title)}》已更新。`)
+      notify({
+        type: 'success',
+        content: `作业《${String(payload.assignment.title)}》已更新。`,
+      })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const cancelAssignmentMutation = useMutation({
@@ -708,12 +736,12 @@ function App() {
       )
     },
     onSuccess: () => {
-      setNotice('作业已取消，相关提交已清理。')
+      notify({ type: 'success', content: '作业已取消，相关提交已清理。' })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
       queryClient.invalidateQueries({ queryKey: ['submissions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const createSubmissionMutation = useMutation({
@@ -723,14 +751,14 @@ function App() {
     },
     onSuccess: (payload) => {
       if (!payload) return
-      setNotice('作业已提交。')
+      notify({ type: 'success', content: '作业已提交。' })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       startTransition(() => {
         setSelectedSubmissionId(String(payload.submission.id))
       })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const updateSubmissionMutation = useMutation({
@@ -739,12 +767,12 @@ function App() {
       return api.updateSubmission(apiBaseUrl, session.accessToken, selectedSubmissionId, submissionContent)
     },
     onSuccess: () => {
-      setNotice('答案已修改。')
+      notify({ type: 'success', content: '答案已修改。' })
       queryClient.invalidateQueries({ queryKey: ['submissions'] })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const gradeSubmissionMutation = useMutation({
@@ -759,14 +787,14 @@ function App() {
       )
     },
     onSuccess: () => {
-      setNotice('批改结果已保存。')
+      notify({ type: 'success', content: '批改结果已保存。' })
       queryClient.invalidateQueries({ queryKey: ['submissions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
       queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const createFeedbackMutation = useMutation({
@@ -781,12 +809,12 @@ function App() {
       )
     },
     onSuccess: () => {
-      setNotice('留言已提交。')
+      notify({ type: 'success', content: '留言已提交。' })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
       queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const createResponseMutation = useMutation({
@@ -795,11 +823,11 @@ function App() {
       return api.createResponse(apiBaseUrl, session.accessToken, feedbackId, responseDraft)
     },
     onSuccess: () => {
-      setNotice('回复已提交。')
+      notify({ type: 'success', content: '回复已提交。' })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
       queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const updateFeedbackMutation = useMutation({
@@ -814,11 +842,11 @@ function App() {
       )
     },
     onSuccess: () => {
-      setNotice('问题/反馈已修改。')
+      notify({ type: 'success', content: '问题/反馈已修改。' })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
       queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const deleteFeedbackMutation = useMutation({
@@ -827,12 +855,12 @@ function App() {
       return api.deleteFeedback(apiBaseUrl, session.accessToken, feedbackId)
     },
     onSuccess: () => {
-      setNotice('问题/反馈已删除。')
+      notify({ type: 'success', content: '问题/反馈已删除。' })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
       queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const updateResponseMutation = useMutation({
@@ -841,11 +869,11 @@ function App() {
       return api.updateResponse(apiBaseUrl, session.accessToken, responseId, responseDraft)
     },
     onSuccess: () => {
-      setNotice('回复已修改。')
+      notify({ type: 'success', content: '回复已修改。' })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
       queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const deleteResponseMutation = useMutation({
@@ -854,11 +882,11 @@ function App() {
       return api.deleteResponse(apiBaseUrl, session.accessToken, responseId)
     },
     onSuccess: () => {
-      setNotice('回复已删除。')
+      notify({ type: 'success', content: '回复已删除。' })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
       queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const createCourseFeedbackMutation = useMutation({
@@ -867,10 +895,10 @@ function App() {
       return api.createCourseFeedback(apiBaseUrl, session.accessToken, selectedCourseId, courseFeedbackDraft)
     },
     onSuccess: () => {
-      setNotice('课程反馈已提交。')
+      notify({ type: 'success', content: '课程反馈已提交。' })
       queryClient.invalidateQueries({ queryKey: ['courseFeedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const updateCourseFeedbackMutation = useMutation({
@@ -879,10 +907,10 @@ function App() {
       return api.updateCourseFeedback(apiBaseUrl, session.accessToken, feedbackId, courseFeedbackDraft)
     },
     onSuccess: () => {
-      setNotice('课程反馈已修改。')
+      notify({ type: 'success', content: '课程反馈已修改。' })
       queryClient.invalidateQueries({ queryKey: ['courseFeedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const deleteCourseFeedbackMutation = useMutation({
@@ -891,10 +919,10 @@ function App() {
       return api.deleteCourseFeedback(apiBaseUrl, session.accessToken, feedbackId)
     },
     onSuccess: () => {
-      setNotice('课程反馈已删除。')
+      notify({ type: 'success', content: '课程反馈已删除。' })
       queryClient.invalidateQueries({ queryKey: ['courseFeedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
   const courses = (coursesQuery.data?.items ?? []) as CourseItem[]
@@ -959,7 +987,8 @@ function App() {
     return (
       <LoginShell
         authMode={authMode}
-        notice={notice}
+        notifications={notifications}
+        onDismissNotification={dismissNotification}
         supportNotes={loginSupportNotes}
         guideNotes={loginGuideNotes}
         loginForm={loginForm}
@@ -1056,7 +1085,7 @@ function App() {
           ) : null}
         </header>
 
-        <div className="notice-bar">{notice}</div>
+        <NotificationStack notifications={notifications} onDismiss={dismissNotification} />
         <WorkspaceContextBar
           context={workspaceContext}
           courses={visibleCourses}

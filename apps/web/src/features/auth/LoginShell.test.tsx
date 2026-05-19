@@ -31,11 +31,13 @@ function renderShell(overrides: Partial<Parameters<typeof LoginShell>[0]> = {}) 
   const onLoginChange = vi.fn()
   const onRegisterChange = vi.fn()
   const onResetChange = vi.fn()
+  const onDismissNotification = vi.fn()
 
   render(
     <LoginShell
       authMode="login"
-      notice="欢迎使用。"
+      notifications={[{ id: 1, type: 'info', content: '欢迎使用。' }]}
+      onDismissNotification={onDismissNotification}
       supportNotes={['教师与教务员使用已分配账号登录。']}
       guideNotes={['统一入口仅用于身份认证，登录后进入课程工作台。']}
       loginForm={emptyLoginForm}
@@ -69,6 +71,7 @@ function renderShell(overrides: Partial<Parameters<typeof LoginShell>[0]> = {}) 
     onLoginChange,
     onRegisterChange,
     onResetChange,
+    onDismissNotification,
   }
 }
 

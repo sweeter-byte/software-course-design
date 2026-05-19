@@ -3,7 +3,7 @@
 本文档记录针对系统验收期的可用性 / 完整性改进项，按优先级分为 P0 / P1 / P2 三个梯队：
 
 - **P0** — 已完成（截至 2026-05-19）。已并入 `main` 分支。
-- **P1** — 待办，影响体验但不阻塞验收。
+- **P1** — 部分完成。P1-4 已完成（2026-05-19），P1-5/6/7 待办。
 - **P2** — 待办，架构与可扩展性优化。
 
 用途：
@@ -15,8 +15,8 @@
 ## 当前基线（参考点）
 
 - 分支：`main`
-- 最近提交：`23d0851 feat(web): surface validation_failed field errors in user-facing messages`
-- 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 53 通过 / 13 文件；`npm run typecheck` 全绿；`npm run lint` 全绿。
+- 最近提交：`23d0851 feat(web): surface validation_failed field errors in user-facing messages`（P1-4 改动尚未提交）
+- 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 61 通过 / 14 文件（含 P1-4 新增的 `useNotifications` 8 用例）；`npm run typecheck` 全绿；`npm run lint` 全绿。
 - 关键命令（沿用 `CLAUDE.md`）：
   ```bash
   npm run dev                # server + web together
@@ -69,19 +69,24 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ---
 
-## P1 · 待办（影响体验）
-
-> P1 实施建议每项独立 commit，便于代码审核。预计每项 1–2 小时工作量。
+## P1 · 已完成
 
 ### P1-4 · `notice` 改为 toast 队列
 
 | 项 | 内容 |
 | --- | --- |
-| 现状 | `apps/web/src/App.tsx` 用单一 `notice: string` + 顶部 `notice-bar` 显示反馈（约 `App.tsx:1057`）。连续操作时旧提示被新提示直接覆盖，用户可能完全错过先前的成功/失败信号。 |
-| 目标 | 多条提示能堆叠、有进入/退出动画、自动消失；保留 `aria-live="polite"`。 |
-| 建议实施 | 1. 新建 `apps/web/src/hooks/useNotifications.ts`：维护 `{id, type, content, expiresAt}[]`，提供 `notify({type, content, ttl?})` / `dismiss(id)`；可借助 `useReducer` 与 `setTimeout`。2. 在 `App.tsx` 顶部渲染 `<NotificationStack />`（新建 `apps/web/src/components/feedback/NotificationStack.tsx`），把所有 `setNotice(...)` 调用替换为 `notify({type, content})`。`type` 取 `'info' | 'success' | 'error'`。3. CSS 在 `apps/web/src/App.css` 复用 `notice-bar` 配色，叠加 `position: fixed; top: 1rem; right: 1rem; display: flex; flex-direction: column;`。4. 不引入第三方库（项目现有依赖最小）。 |
-| 验收准则 | 连续触发两次错误（例如重复加入课程），两条都可见、能分别 dismiss；屏幕宽度 < 600px 时仍可读；无障碍：每条通知有 `role="status"`。 |
-| 风险 | `setNotice` 站点 ≈ 25 处，需逐个迁移；批量替换前先确认无 `notice` 直接读出（应只在 `notice-bar` 渲染处读）。 |
+| 提交 | （本地改动，未提交） |
+| 前端改动 | 新增 `apps/web/src/hooks/useNotifications.ts`：基于 `useReducer` 维护 `Notification[]`；导出 `notify({type, content, ttl?})` / `dismiss(id)` / `clear()`；默认 TTL 为 info/success 5s、error 8s；卸载时清理所有 `setTimeout`。新增 `apps/web/src/components/notifications/NotificationStack.tsx`：渲染 `role="status"` + `aria-live="polite"` 的通知列表，每条带 `×` 关闭按钮。`apps/web/src/App.tsx`：移除 `notice: string` 与 `setNotice`；引入 `useNotifications()`；用一次性 `useEffect`（清理函数 dismiss）注入欢迎/恢复登录提示，兼容 React 18 `StrictMode` 双 mount；把全部 ≈25 处 `setNotice(...)` 替换为 `notify({type, content})`，成功路径用 `'success'`、错误路径用 `'error'`、验证码/退出/注销等中性提示用 `'info'`；登录前的 `LoginShell` 和登录后主框架都改为渲染 `<NotificationStack />`。`apps/web/src/features/auth/LoginShell.tsx`：`notice: string` 改为 `notifications + onDismissNotification`；在 `login-form-column` 内联渲染通知栈（`login-notification-stack` 关闭 fixed 定位）。`apps/web/src/App.css`：删除 `.notice-bar`，新增 `.notification-stack`（默认 `position: fixed; top:16px; right:16px;` + 600px 媒体查询全宽），`.notification-{info,success,error}` 复用 `--info-soft/--success-soft/--danger-soft`，附带 `notification-enter` 进入动画。 |
+| 文档 | 本文件（基线测试计数 + P1 状态说明）。 |
+| 测试 | `apps/web/src/hooks/useNotifications.test.ts` 新增 8 用例（初始为空 / notify 入队 / 多条堆叠且 id 唯一 / dismiss 移除 / 默认 TTL 自动消失 / error TTL 更长 / `ttl: null` 常驻 / 提前 dismiss 不影响下一条计时）。`apps/web/src/features/auth/LoginShell.test.tsx` 更新为新 props（`notifications` + `onDismissNotification`）。`npm run test` 全绿（后端 48/10；Web 61/14；dev-runtime parser 测试通过）。 |
+| 偏离 | 文件目录使用 `components/notifications/` 而非建议的 `components/feedback/`，避免与领域概念「课程反馈 / 作业反馈」混淆。 |
+| 验收准则 | 连续触发两次错误（例如重复加入课程），两条都可见、能分别 dismiss；屏幕宽度 < 600px 时仍可读；每条通知有 `role="status"` 且容器 `aria-live="polite"`；登录前与登录后的通知样式一致。 |
+
+---
+
+## P1 · 待办（影响体验）
+
+> P1 实施建议每项独立 commit，便于代码审核。预计每项 1–2 小时工作量。
 
 ### P1-5 · 破坏性操作统一二次确认
 
@@ -153,9 +158,11 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ## 给审核者的速查
 
-- 所有 P0 改动均带新增测试，可通过 `npm run test` 与 `npm run typecheck` 整体验证。
+- P0 与 P1-4 改动均带新增测试，可通过 `npm run test` 与 `npm run typecheck` 整体验证。
 - P0 涉及文件（按重要性）：
   - 后端：`apps/server/src/modules/courses/routes.ts`、`apps/server/tests/enrollments.integration.test.ts`
   - 前端：`apps/web/src/api.ts`、`apps/web/src/utils/errors.ts`、`apps/web/src/App.tsx`、`apps/web/src/domain.ts`
   - 文档：`docs/API_SPEC.md`、`docs/ACCEPTANCE_SELF_CHECK.md`、`docs/MANUAL_ACCEPTANCE_DEMO_CHECKLIST.md`
-- P1/P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
+- P1-4 涉及文件：
+  - 前端：`apps/web/src/hooks/useNotifications.ts`、`apps/web/src/hooks/useNotifications.test.ts`、`apps/web/src/components/notifications/NotificationStack.tsx`、`apps/web/src/App.tsx`、`apps/web/src/App.css`、`apps/web/src/features/auth/LoginShell.tsx`、`apps/web/src/features/auth/LoginShell.test.tsx`
+- P1-5/6/7 与 P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
