@@ -4,7 +4,7 @@
 
 - **P0** — 已完成（截至 2026-05-19）。已并入 `main` 分支。
 - **P1** — 已全部完成（截至 2026-05-19，P1-4 / P1-5 / P1-6 / P1-7）。
-- **P2** — 待办，架构与可扩展性优化。
+- **P2** — 进行中：P2-8（路由骨架）已完成；P2-9 / P2-10 待办。
 
 用途：
 1. 新会话延续工作时，可直接基于本文件查阅已完成与待办。
@@ -15,8 +15,8 @@
 ## 当前基线（参考点）
 
 - 分支：`main`
-- 最近提交：`a98c990 feat(officer): add user administration (list + enable/disable)`（前置：`e543fc3 docs: record P1-6 HTML5 form validation commit in UX tracker`）
-- 测试状态：后端 vitest 52 通过 / 11 文件（含 P1-7 新增的 `users-admin.integration.test.ts` 4 用例）；Web vitest 64 通过 / 15 文件（P1-7 未新增前端单测，新组件 `UserAdminSection` 走人工 / 集成验收）；`npm run typecheck` 全绿；`npm run lint` 全绿。
+- 最近提交：`1b00a94 feat(web): drive workspace view from URL via React Router`（前置：`a98c990 feat(officer): add user administration (list + enable/disable)`）
+- 测试状态：后端 vitest 52 通过 / 11 文件；Web vitest 64 通过 / 15 文件（P2-8 未新增前端单测，浏览器路由由 vite build + dev-server URL 冒烟覆盖）；`npm run typecheck` 全绿；`npm run lint` 全绿；`npm run build --workspace @course/web` 通过。
 - 关键命令（沿用 `CLAUDE.md`）：
   ```bash
   npm run dev                # server + web together
@@ -121,19 +121,28 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 ---
 
-## P2 · 待办（架构与可扩展性）
+## P2 · 已完成
 
-> P2 改动跨度较大，建议各自独立分支 + PR；完成前可与本文件 P0/P1 解耦推进。
-
-### P2-8 · 按视图拆分 `App.tsx` + 引入 React Router
+### P2-8 · 引入 React Router（路由骨架）
 
 | 项 | 内容 |
 | --- | --- |
-| 现状 | `apps/web/src/App.tsx` 仍约 2000 行；所有视图通过 `view-hidden` 类常驻 DOM，由 `visibleView` 切换。优点是切换无白屏，缺点是 DOM 庞大、状态全局共享、URL 无法分享、无前进/后退。 |
-| 目标 | 按 `WorkspaceView` 把内容拆为路由组件，浏览器地址栏反映当前视图，支持分享与深链。 |
-| 建议实施 | 1. 引入 `react-router-dom@^7` 并在 `apps/web/vite.config.ts` dedupe（保持现有 React/ReactDOM dedupe 风格）；2. 把 `apps/web/src/App.tsx` 改为 `<RouterProvider>` 容器；路由结构：`/login`、`/student/{dashboard,courses,assignments,interaction,course-feedbacks,account}`、`/teacher/{dashboard,courses,assignments,grading,course-feedbacks,account}`、`/officer/{dashboard,courses,course-admin,course-feedbacks,user-admin,account}`。3. 抽出 `apps/web/src/features/{role}/views/{ViewName}.tsx`，复用现有子组件（`StudentAssignmentWorkspace` 等）。4. 顶部「当前工作上下文」与 React Query 状态保持全局，通过 Context 或 url search params 持久化。 |
-| 验收准则 | 浏览器前进/后退能在视图间切换；刷新 `/teacher/grading` 仍落地正确卡片；无任一现有用例 / 集成测试回归。 |
-| 风险 | 单文件拆分量大；建议先完成 P0/P1 减少冲突再做。可分若干 PR：路由骨架 → 学生视图迁移 → 教师视图迁移 → 教务员视图迁移 → 删除 `view-hidden`。 |
+| 提交 | `1b00a94 feat(web): drive workspace view from URL via React Router` |
+| 背景 | `apps/web/src/App.tsx` 之前用 `useState<WorkspaceView>('dashboard')` 驱动侧栏切换；地址栏始终是 `/`，刷新即跳回 dashboard，前进/后退无效，深链不可分享。 |
+| 范围 | 仅做「路由骨架」一步（路线图建议的 5 步 PR 拆分中的第 1 步）；视图按文件拆分与 `view-hidden` 移除分别交给 P2-10 与后续 PR。当前 DOM 结构与所有 SectionCard 渲染逻辑保持不变，仍按 `visibleView` 切换 `view-hidden`，因此切换零白屏的体验未受影响。 |
+| 前端改动 | `apps/web/src/main.tsx`：在 `QueryClientProvider` 内层加 `<BrowserRouter>`。`apps/web/src/App.tsx`：① 新增 `viewToSegment` / `segmentToView` / `viewPath()` / `parseRouteView()` 四个顶层辅助，把 `WorkspaceView` 枚举（含 `courseAdmin / courseFeedbacks / userAdmin` 三个驼峰值）映射成 kebab URL 段；② `useNavigate()` + `useLocation()` 替换 `useState<WorkspaceView>('dashboard')`，`visibleView` 改由 `parseRouteView(location.pathname, currentRole)` 派生，URL 段与 role 不匹配或视图非法时回落 `'dashboard'`；③ 新增一个 `useEffect`：未登录且 URL 非 `/login` → `navigate('/login', { replace: true })`；已登录但 URL 非合法 `/{role}/{view}` → `navigate(viewPath(role, 'dashboard'), { replace: true })`，覆盖刷新场景与登出场景；④ 侧栏 `<button>` 的 `onClick` 由 `setActiveView(item.view)` 改为 `navigate(viewPath(currentRole, item.view))`；⑤ `loginMutation.onSuccess` 在 `setSession` 之后立刻 `navigate(viewPath(payload.user.role, 'dashboard'), { replace: true })`，仍保留 `startTransition(() => resetWorkspaceSelection())`；⑥ 登出 / 注销路径不显式 navigate，由 `setSession(null)` → useEffect 兜底跳 `/login`。 |
+| URL 方案 | `/login`；`/{role}/{view}`，其中 `role ∈ {student, teacher, officer}`，`view` 取值与现有 `roleNavigation` 一致，仅做 kebab 变换：`courseAdmin → course-admin`、`courseFeedbacks → course-feedbacks`、`userAdmin → user-admin`，其他保持原名。非法 URL（角色不匹配 / view 不在该角色导航中 / 段名拼错）一律重定向到该角色的 dashboard，登出后一律重定向 `/login`。 |
+| Vite 配置 | `apps/web/vite.config.ts` **不为 react-router / react-router-dom 加 alias 或 dedupe**——这两个包未被 workspace hoist（仅落在 `apps/web/node_modules`），重复 dedupe 反而会破坏 `react-router-dom` 内部对 `react-router/dom` 子路径的导入，导致 `vite build` 失败。React/ReactDOM 的现有 dedupe 与 `createRequire` 解析块原样保留。 |
+| 文档 | 本文件（基线提交 / 测试计数 / 顶部状态汇总；P2-8 从「待办」迁入「已完成」并新增「速查段」条目）。 |
+| 测试 | 未新增前端单测：路由骨架的关键行为依赖 `BrowserRouter` 与浏览器 `history`，已有 15 个 vitest 文件均针对子组件（`LoginShell` / `AccountSection` / `StudentAssignmentWorkspace` / `TeacherTaskWorkspace` / `useNotifications` / `confirm` 等），不渲染 `App` 根，因此无 MemoryRouter 适配需求。冒烟验证：`vite build` 通过（99 modules transformed，CSS/JS 体积无显著增长，gzip JS 104.13 kB）；`npm run dev` 启动后 `curl http://localhost:5173/login` 与 `curl http://localhost:5173/teacher/grading` 均返回 200 + index.html（确认 Vite dev server 对未知路径仍交给 SPA）。`npm run test` 全绿（后端 52/11；Web 64/15；dev-runtime parser 通过）；`npm run typecheck` / `npm run lint` 全绿。 |
+| 偏离 | 路线图建议 ① 改成 `<RouterProvider>` + data router、② 按文件抽出 `features/{role}/views/{ViewName}.tsx`、③ Vite dedupe `react-router-dom`。本次只做最小可行实现：保留组件式 `<BrowserRouter>` 而非 `RouterProvider`（避免引入 `createBrowserRouter` 配置带来的 loader/action 范式跨度），不拆视图文件（App.tsx 仍 ~2240 行），不 dedupe（见上）。视图文件按角色拆分留给后续 PR；`view-hidden` 移除归入 P2-10。 |
+| 验收准则 | 1. 侧栏点「我的作业」后地址栏变 `/student/assignments`；浏览器后退按钮回到 `/student/dashboard`。2. 刷新 `/teacher/grading` 仍直接落到「教学任务」卡片（非 dashboard）。3. 未登录访问 `/officer/user-admin` 自动跳 `/login`；登录后再访问可直达。4. 登出后地址栏自动变 `/login`。5. 输入非法路径 `/student/foo-bar`（或角色不匹配的 `/student/grading`）自动重定向到该角色的 dashboard。6. 现有 64 个 web vitest / 52 个 server vitest 用例全部通过。 |
+
+---
+
+## P2 · 待办（架构与可扩展性）
+
+> P2 改动跨度较大，建议各自独立分支 + PR；完成前可与本文件 P0/P1 解耦推进。
 
 ### P2-9 · 移动端响应式：侧栏改抽屉
 
@@ -175,4 +184,6 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
   - 共享：`packages/shared/src/index.ts`（`userListQuerySchema` / `userStatusUpdateSchema`）
   - 前端：`apps/web/src/features/officer/UserAdminSection.tsx`、`apps/web/src/api.ts`、`apps/web/src/domain.ts`、`apps/web/src/utils/errors.ts`、`apps/web/src/App.tsx`、`apps/web/src/App.css`
   - 文档：`docs/API_SPEC.md`、`docs/REQUIREMENTS_TRACEABILITY.md`
-- P2 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
+- P2-8 涉及文件：
+  - 前端：`apps/web/src/main.tsx`、`apps/web/src/App.tsx`（`apps/web/vite.config.ts` 探索过 dedupe，但因 `react-router-dom` 子路径导入而回退，未改动）
+- P2-9 / P2-10 尚未实现，正文中的「建议实施」是路线图而非现状描述，审核时无须验证。
