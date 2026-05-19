@@ -15,7 +15,7 @@
 ## 当前基线（参考点）
 
 - 分支：`main`
-- 最近提交：`23d0851 feat(web): surface validation_failed field errors in user-facing messages`（P1-4 改动尚未提交）
+- 最近提交：`721a3af feat(web): stack UI notifications as a dismissible toast queue`
 - 测试状态：后端 vitest 48 通过 / 10 文件；Web vitest 61 通过 / 14 文件（含 P1-4 新增的 `useNotifications` 8 用例）；`npm run typecheck` 全绿；`npm run lint` 全绿。
 - 关键命令（沿用 `CLAUDE.md`）：
   ```bash
@@ -75,7 +75,7 @@ P0 来自 `2026-05-18` 的可用性评估（见对话历史中的「课程互动
 
 | 项 | 内容 |
 | --- | --- |
-| 提交 | （本地改动，未提交） |
+| 提交 | `721a3af feat(web): stack UI notifications as a dismissible toast queue` |
 | 前端改动 | 新增 `apps/web/src/hooks/useNotifications.ts`：基于 `useReducer` 维护 `Notification[]`；导出 `notify({type, content, ttl?})` / `dismiss(id)` / `clear()`；默认 TTL 为 info/success 5s、error 8s；卸载时清理所有 `setTimeout`。新增 `apps/web/src/components/notifications/NotificationStack.tsx`：渲染 `role="status"` + `aria-live="polite"` 的通知列表，每条带 `×` 关闭按钮。`apps/web/src/App.tsx`：移除 `notice: string` 与 `setNotice`；引入 `useNotifications()`；用一次性 `useEffect`（清理函数 dismiss）注入欢迎/恢复登录提示，兼容 React 18 `StrictMode` 双 mount；把全部 ≈25 处 `setNotice(...)` 替换为 `notify({type, content})`，成功路径用 `'success'`、错误路径用 `'error'`、验证码/退出/注销等中性提示用 `'info'`；登录前的 `LoginShell` 和登录后主框架都改为渲染 `<NotificationStack />`。`apps/web/src/features/auth/LoginShell.tsx`：`notice: string` 改为 `notifications + onDismissNotification`；在 `login-form-column` 内联渲染通知栈（`login-notification-stack` 关闭 fixed 定位）。`apps/web/src/App.css`：删除 `.notice-bar`，新增 `.notification-stack`（默认 `position: fixed; top:16px; right:16px;` + 600px 媒体查询全宽），`.notification-{info,success,error}` 复用 `--info-soft/--success-soft/--danger-soft`，附带 `notification-enter` 进入动画。 |
 | 文档 | 本文件（基线测试计数 + P1 状态说明）。 |
 | 测试 | `apps/web/src/hooks/useNotifications.test.ts` 新增 8 用例（初始为空 / notify 入队 / 多条堆叠且 id 唯一 / dismiss 移除 / 默认 TTL 自动消失 / error TTL 更长 / `ttl: null` 常驻 / 提前 dismiss 不影响下一条计时）。`apps/web/src/features/auth/LoginShell.test.tsx` 更新为新 props（`notifications` + `onDismissNotification`）。`npm run test` 全绿（后端 48/10；Web 61/14；dev-runtime parser 测试通过）。 |
