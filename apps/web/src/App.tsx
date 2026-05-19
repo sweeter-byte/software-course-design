@@ -1,4 +1,4 @@
-import { startTransition, useDeferredValue, useEffect, useState, type ReactNode } from 'react'
+import { Suspense, lazy, startTransition, useDeferredValue, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useLocation, useNavigate } from 'react-router-dom'
 
@@ -18,11 +18,16 @@ import type {
   SubmissionItem,
   UserRole,
 } from './domain'
-import { AccountSection } from './features/account/AccountSection'
 import { LoginShell, type AuthMode } from './features/auth/LoginShell'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
-import { UserAdminSection } from './features/officer/UserAdminSection'
+
+const AccountSection = lazy(() =>
+  import('./features/account/AccountSection').then((m) => ({ default: m.AccountSection })),
+)
+const UserAdminSection = lazy(() =>
+  import('./features/officer/UserAdminSection').then((m) => ({ default: m.UserAdminSection })),
+)
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
@@ -308,6 +313,31 @@ function App() {
   const routeView = parseRouteView(location.pathname, currentRole)
   const visibleView: WorkspaceView = routeView ?? 'dashboard'
   const activePageTitle = viewLabels[visibleView]
+
+  const showHero = visibleView === 'dashboard'
+  const showAccount = visibleView === 'account'
+  const showUserAdmin = currentRole === 'officer' && visibleView === 'userAdmin'
+  const showCoursesList = visibleView === 'dashboard' || visibleView === 'courses'
+  const showCourseAdmin = currentRole === 'officer' && visibleView === 'courseAdmin'
+  const showCourseParticipation =
+    currentRole === 'student'
+      ? visibleView === 'courses'
+      : currentRole === 'teacher' && visibleView === 'assignments'
+  const showCourseFeedbacks = visibleView === 'courseFeedbacks'
+  const showAssignmentsList = visibleView === 'assignments'
+  const showAssignmentDetail =
+    currentRole === 'teacher'
+      ? visibleView === 'grading'
+      : currentRole === 'student' && visibleView === 'assignments'
+  const showInteraction = currentRole !== 'teacher' && visibleView === 'interaction'
+  const showCurrentProgress =
+    visibleView !== 'account' && visibleView !== 'courseAdmin' && visibleView !== 'userAdmin'
+  const showFirstGrid = showAccount || showUserAdmin || showCoursesList || showCourseAdmin || showCourseParticipation
+  const showSecondGrid = showCourseFeedbacks || showAssignmentsList || showAssignmentDetail
+  const showThirdGrid = showInteraction || showCurrentProgress
+  const viewLoadingFallback = (
+    <StatePanel title="视图加载中" detail="正在准备所需模块，请稍候。" />
+  )
 
   useEffect(() => {
     window.localStorage.setItem('cms_session', JSON.stringify(session))
@@ -946,32 +976,6 @@ function App() {
     onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
-  const updateResponseMutation = useMutation({
-    mutationFn: async (responseId: string) => {
-      if (!session) return null
-      return api.updateResponse(apiBaseUrl, session.accessToken, responseId, responseDraft)
-    },
-    onSuccess: () => {
-      notify({ type: 'success', content: '回复已修改。' })
-      queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
-      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
-    },
-    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
-  })
-
-  const deleteResponseMutation = useMutation({
-    mutationFn: async (responseId: string) => {
-      if (!session) return null
-      return api.deleteResponse(apiBaseUrl, session.accessToken, responseId)
-    },
-    onSuccess: () => {
-      notify({ type: 'success', content: '回复已删除。' })
-      queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
-      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
-    },
-    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
-  })
-
   const createCourseFeedbackMutation = useMutation({
     mutationFn: async () => {
       if (!session || !selectedCourseId) return null
@@ -1256,107 +1260,119 @@ function App() {
         />
 
         <div className="dashboard-layout">
-            <div className={visibleView === 'dashboard' ? 'hero-banner' : 'hero-banner view-hidden'}>
-              <div>
-                <p className="eyebrow">当前账号</p>
-                <h3>
-                  {session.user.realName}
-                  <span> {roleLabels[session.user.role]}</span>
-                </h3>
-                <p>
-                  {roleDescription} 当前登录手机号为 {session.user.phone}。
-                </p>
-              </div>
-              <div className="identity-chip">
-                <span>{roleLabels[session.user.role]}</span>
-                <strong>{session.user.username}</strong>
-              </div>
-            </div>
+            {showHero ? (
+              <>
+                <div className="hero-banner">
+                  <div>
+                    <p className="eyebrow">当前账号</p>
+                    <h3>
+                      {session.user.realName}
+                      <span> {roleLabels[session.user.role]}</span>
+                    </h3>
+                    <p>
+                      {roleDescription} 当前登录手机号为 {session.user.phone}。
+                    </p>
+                  </div>
+                  <div className="identity-chip">
+                    <span>{roleLabels[session.user.role]}</span>
+                    <strong>{session.user.username}</strong>
+                  </div>
+                </div>
 
-            <div className={visibleView === 'dashboard' ? 'hero-metrics' : 'hero-metrics view-hidden'}>
-              {heroHighlights.map((item) => (
-                <article key={item.label} className="hero-metric">
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </article>
-              ))}
-            </div>
+                <div className="hero-metrics">
+                  {heroHighlights.map((item) => (
+                    <article key={item.label} className="hero-metric">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </article>
+                  ))}
+                </div>
 
-            <div className={visibleView === 'dashboard' ? 'summary-grid' : 'summary-grid view-hidden'}>
-              {Object.entries(dashboardSummary).map(([label, value], index) => (
-                <SummaryCard
-                  key={label}
-                  label={summaryLabels[label] ?? label}
-                  value={value}
-                  accent={['#005bac', '#1d4ed8', '#d97706', '#9f1239'][index % 4]}
-                />
-              ))}
-            </div>
+                <div className="summary-grid">
+                  {Object.entries(dashboardSummary).map(([label, value], index) => (
+                    <SummaryCard
+                      key={label}
+                      label={summaryLabels[label] ?? label}
+                      value={value}
+                      accent={['#005bac', '#1d4ed8', '#d97706', '#9f1239'][index % 4]}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : null}
 
+            {showFirstGrid ? (
             <div className="workspace-grid">
-              <SectionCard
-                title="账号维护"
-                subtitle="修改个人资料、密码或注销当前账号。"
-                className={visibleView === 'account' ? 'wide-card' : 'view-hidden'}
-              >
-                <AccountSection
-                  phone={session.user.phone}
-                  profile={profileDraft}
-                  password={passwordDraft}
-                  phoneChange={phoneDraft}
-                  isProfilePending={updateProfileMutation.isPending}
-                  isPasswordPending={changePasswordMutation.isPending}
-                  isCancelPending={cancelAccountMutation.isPending}
-                  isPhoneCodePending={phoneCodeMutation.isPending}
-                  isPhoneChangePending={changePhoneMutation.isPending}
-                  onProfileChange={setProfileDraft}
-                  onPasswordChange={setPasswordDraft}
-                  onPhoneChange={setPhoneDraft}
-                  onSubmitProfile={() => updateProfileMutation.mutate()}
-                  onSubmitPassword={() => changePasswordMutation.mutate()}
-                  onCancelAccount={() => {
-                    if (confirmDestructive('确认注销当前账号吗？注销后将立即退出登录，且无法恢复。')) {
-                      cancelAccountMutation.mutate()
-                    }
-                  }}
-                  onRequestPhoneCode={(target) => phoneCodeMutation.mutate(target)}
-                  onSubmitPhoneChange={() => changePhoneMutation.mutate()}
-                />
-              </SectionCard>
+              {showAccount ? (
+                <SectionCard
+                  title="账号维护"
+                  subtitle="修改个人资料、密码或注销当前账号。"
+                  className="wide-card"
+                >
+                  <Suspense fallback={viewLoadingFallback}>
+                    <AccountSection
+                      phone={session.user.phone}
+                      profile={profileDraft}
+                      password={passwordDraft}
+                      phoneChange={phoneDraft}
+                      isProfilePending={updateProfileMutation.isPending}
+                      isPasswordPending={changePasswordMutation.isPending}
+                      isCancelPending={cancelAccountMutation.isPending}
+                      isPhoneCodePending={phoneCodeMutation.isPending}
+                      isPhoneChangePending={changePhoneMutation.isPending}
+                      onProfileChange={setProfileDraft}
+                      onPasswordChange={setPasswordDraft}
+                      onPhoneChange={setPhoneDraft}
+                      onSubmitProfile={() => updateProfileMutation.mutate()}
+                      onSubmitPassword={() => changePasswordMutation.mutate()}
+                      onCancelAccount={() => {
+                        if (confirmDestructive('确认注销当前账号吗？注销后将立即退出登录，且无法恢复。')) {
+                          cancelAccountMutation.mutate()
+                        }
+                      }}
+                      onRequestPhoneCode={(target) => phoneCodeMutation.mutate(target)}
+                      onSubmitPhoneChange={() => changePhoneMutation.mutate()}
+                    />
+                  </Suspense>
+                </SectionCard>
+              ) : null}
 
-              {currentRole === 'officer' ? (
+              {showUserAdmin ? (
                 <SectionCard
                   title="用户管理"
                   subtitle="查看全部账号，并按需禁用或恢复访问权限。"
-                  className={visibleView === 'userAdmin' ? 'wide-card' : 'view-hidden'}
+                  className="wide-card"
                 >
-                  <UserAdminSection
-                    users={(adminUsersQuery.data?.users ?? []) as AdminUserItem[]}
-                    roleFilter={userAdminRoleFilter}
-                    isLoading={adminUsersQuery.isLoading}
-                    isToggling={toggleUserStatusMutation.isPending}
-                    currentUserId={session.user.id}
-                    pendingUserId={userAdminPendingId}
-                    onRoleFilterChange={setUserAdminRoleFilter}
-                    onToggle={(user) => {
-                      const nextDisabled = user.status !== 'disabled'
-                      const confirmMessage = nextDisabled
-                        ? `确认禁用 ${user.realName} 的账号吗？禁用后该账号无法登录。`
-                        : `确认恢复 ${user.realName} 的账号吗？恢复后该账号可立即登录。`
-                      if (!confirmDestructive(confirmMessage)) {
-                        return
-                      }
-                      toggleUserStatusMutation.mutate({ user, disabled: nextDisabled })
-                    }}
-                  />
+                  <Suspense fallback={viewLoadingFallback}>
+                    <UserAdminSection
+                      users={(adminUsersQuery.data?.users ?? []) as AdminUserItem[]}
+                      roleFilter={userAdminRoleFilter}
+                      isLoading={adminUsersQuery.isLoading}
+                      isToggling={toggleUserStatusMutation.isPending}
+                      currentUserId={session.user.id}
+                      pendingUserId={userAdminPendingId}
+                      onRoleFilterChange={setUserAdminRoleFilter}
+                      onToggle={(user) => {
+                        const nextDisabled = user.status !== 'disabled'
+                        const confirmMessage = nextDisabled
+                          ? `确认禁用 ${user.realName} 的账号吗？禁用后该账号无法登录。`
+                          : `确认恢复 ${user.realName} 的账号吗？恢复后该账号可立即登录。`
+                        if (!confirmDestructive(confirmMessage)) {
+                          return
+                        }
+                        toggleUserStatusMutation.mutate({ user, disabled: nextDisabled })
+                      }}
+                    />
+                  </Suspense>
                 </SectionCard>
               ) : null}
 
 
+              {showCoursesList ? (
               <SectionCard
                 title="课程列表"
                 subtitle="支持搜索、查看与进入对应课程。"
-                className={visibleView === 'dashboard' || visibleView === 'courses' ? 'wide-card' : 'view-hidden'}
+                className="wide-card"
               >
                 <div className="inline-row">
                   <input
@@ -1431,12 +1447,13 @@ function App() {
                   )}
                 </div>
               </SectionCard>
+              ) : null}
 
-              {currentRole === 'officer' ? (
+              {showCourseAdmin ? (
                 <SectionCard
                   title="课程信息维护"
                   subtitle="完善课程基础信息，安排教学时间与授课教师。"
-                  className={visibleView === 'courseAdmin' ? 'wide-card' : 'view-hidden'}
+                  className="wide-card"
                 >
                   <form
                     className="stack-form"
@@ -1662,7 +1679,8 @@ function App() {
                     </div>
                   </form>
                 </SectionCard>
-              ) : (
+              ) : null}
+              {showCourseParticipation ? (
                 <SectionCard
                   title={currentRole === 'student' ? '课程参与' : '教学安排'}
                   subtitle={
@@ -1670,15 +1688,7 @@ function App() {
                       ? '加入课程后，可继续查看当前课程下的作业与互动内容。'
                       : '选定课程后，可继续发布作业并组织教学活动。'
                   }
-                  className={
-                    currentRole === 'student'
-                      ? visibleView === 'courses'
-                        ? 'wide-card'
-                        : 'view-hidden'
-                      : visibleView === 'assignments'
-                        ? 'wide-card'
-                        : 'view-hidden'
-                  }
+                  className="wide-card"
                 >
                   {currentRole === 'student' ? (
                     <>
@@ -1854,16 +1864,17 @@ function App() {
                     </form>
                   )}
                 </SectionCard>
-              )}
+              ) : null}
             </div>
+            ) : null}
 
+            {showSecondGrid ? (
             <div className="workspace-grid">
+              {showCourseFeedbacks ? (
               <SectionCard
                 title="课程反馈"
                 subtitle="学生提交课程维度反馈，教师和教务员可按课程查看。"
-                className={
-                  visibleView === 'courseFeedbacks' ? 'wide-card' : 'view-hidden'
-                }
+                className="wide-card"
               >
                 <p className="muted-paragraph">
                   当前课程：
@@ -1985,11 +1996,12 @@ function App() {
                   )}
                 </div>
               </SectionCard>
+              ) : null}
 
+              {showAssignmentsList ? (
               <SectionCard
                 title="作业安排"
                 subtitle="查看当前课程下的作业信息与截止时间。"
-                className={visibleView === 'assignments' ? undefined : 'view-hidden'}
               >
                 <div className="entity-list">
                   {assignmentsQuery.isLoading ? (
@@ -2029,22 +2041,15 @@ function App() {
                   )}
                 </div>
               </SectionCard>
+              ) : null}
 
+              {showAssignmentDetail ? (
               <SectionCard
                 title={currentRole === 'teacher' ? '教师任务工作台' : '我的作业'}
                 subtitle={
                   currentRole === 'teacher'
                     ? '集中处理待批改提交、待回复反馈与课程反馈。'
                     : '学生在一个页面内完成作业查看、提交与反馈。'
-                }
-                className={
-                  currentRole === 'teacher'
-                    ? visibleView === 'grading'
-                      ? undefined
-                      : 'view-hidden'
-                    : visibleView === 'assignments'
-                      ? undefined
-                      : 'view-hidden'
                 }
               >
                 {currentRole === 'student' ? (
@@ -2111,13 +2116,16 @@ function App() {
                   />
                 )}
               </SectionCard>
+              ) : null}
             </div>
+            ) : null}
 
+            {showThirdGrid ? (
             <div className="workspace-grid">
+              {showInteraction ? (
               <SectionCard
                 title="互动交流"
                 subtitle="围绕课程学习与作业反馈持续沟通。"
-                className={currentRole === 'teacher' || visibleView !== 'interaction' ? 'view-hidden' : undefined}
               >
                 {currentRole === 'student' ? (
                   <form
@@ -2191,39 +2199,6 @@ function App() {
                           <div key={response.id} className="thread-response">
                             <span>教师回复</span>
                             <p>{response.content}</p>
-                            {currentRole === 'teacher' ? (
-                              <div className="inline-row">
-                                <button
-                                  className="ghost-button"
-                                  type="button"
-                                  onClick={() => {
-                                    setResponseDraft(response.content)
-                                  }}
-                                >
-                                  载入回复
-                                </button>
-                                <button
-                                  className="ghost-button"
-                                  type="button"
-                                  disabled={updateResponseMutation.isPending}
-                                  onClick={() => updateResponseMutation.mutate(response.id)}
-                                >
-                                  修改回复
-                                </button>
-                                <button
-                                  className="danger-button"
-                                  type="button"
-                                  disabled={deleteResponseMutation.isPending}
-                                  onClick={() => {
-                                    if (confirmDestructive('确认删除该回复吗？删除后无法恢复。')) {
-                                      deleteResponseMutation.mutate(response.id)
-                                    }
-                                  }}
-                                >
-                                  删除回复
-                                </button>
-                              </div>
-                            ) : null}
                           </div>
                         ))}
 
@@ -2263,33 +2238,6 @@ function App() {
                             </button>
                           </div>
                         ) : null}
-
-                        {currentRole === 'teacher' ? (
-                          <form
-                            className="inline-form"
-                            onSubmit={(event) => {
-                              event.preventDefault()
-                              createResponseMutation.mutate(feedback.id)
-                            }}
-                          >
-                            <input
-                              aria-label="教师回复内容"
-                              name="responseContent"
-                              required
-                              minLength={2}
-                              title="请输入回复内容"
-                              value={responseDraft}
-                              onChange={(event) => setResponseDraft(event.target.value)}
-                            />
-                            <button
-                              className="ghost-button"
-                              type="submit"
-                              disabled={createResponseMutation.isPending}
-                            >
-                              回复
-                            </button>
-                          </form>
-                        ) : null}
                       </article>
                     ))
                   ) : (
@@ -2304,28 +2252,26 @@ function App() {
                   )}
                 </div>
               </SectionCard>
+              ) : null}
 
-              <SectionCard
-                title="当前进度"
-                subtitle="帮助你快速查看当前课程、作业与提交状态。"
-                className={
-                  visibleView === 'account' ||
-                  visibleView === 'courseAdmin' ||
-                  visibleView === 'userAdmin'
-                    ? 'view-hidden'
-                    : 'current-progress-card'
-                }
-              >
-                <ul className="bullet-list">
-                  <li>课程：{selectedCourse ? `${selectedCourse.courseName} / ${selectedCourse.courseCode}` : '未选择'}</li>
-                  <li>作业：{selectedAssignment ? selectedAssignment.title : '未选择'}</li>
-                  <li>提交：{selectedSubmission ? selectedSubmission.content : '未选择'}</li>
-                  <li>课程状态：{coursesQuery.isFetching ? '更新中' : '已就绪'}</li>
-                  <li>作业状态：{assignmentsQuery.isFetching ? '更新中' : '已就绪'}</li>
-                  <li>互动状态：{feedbacksQuery.isFetching ? '更新中' : '已就绪'}</li>
-                </ul>
-              </SectionCard>
+              {showCurrentProgress ? (
+                <SectionCard
+                  title="当前进度"
+                  subtitle="帮助你快速查看当前课程、作业与提交状态。"
+                  className="current-progress-card"
+                >
+                  <ul className="bullet-list">
+                    <li>课程：{selectedCourse ? `${selectedCourse.courseName} / ${selectedCourse.courseCode}` : '未选择'}</li>
+                    <li>作业：{selectedAssignment ? selectedAssignment.title : '未选择'}</li>
+                    <li>提交：{selectedSubmission ? selectedSubmission.content : '未选择'}</li>
+                    <li>课程状态：{coursesQuery.isFetching ? '更新中' : '已就绪'}</li>
+                    <li>作业状态：{assignmentsQuery.isFetching ? '更新中' : '已就绪'}</li>
+                    <li>互动状态：{feedbacksQuery.isFetching ? '更新中' : '已就绪'}</li>
+                  </ul>
+                </SectionCard>
+              ) : null}
             </div>
+            ) : null}
           </div>
       </main>
     </div>

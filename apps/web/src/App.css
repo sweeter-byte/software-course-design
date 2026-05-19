@@ -849,7 +849,7 @@ button {
   align-items: start;
 }
 
-.workspace-grid:has(.section-card:nth-child(3):not(.view-hidden)) {
+.workspace-grid:has(.section-card:nth-child(3)) {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -862,11 +862,6 @@ button {
 
 .section-card.wide-card {
   grid-column: 1 / -1;
-}
-
-.section-card.view-hidden,
-.view-hidden {
-  display: none !important;
 }
 
 .section-head {
@@ -1216,7 +1211,7 @@ button {
   }
 
   .workspace-grid,
-  .workspace-grid:has(.section-card:nth-child(3):not(.view-hidden)),
+  .workspace-grid:has(.section-card:nth-child(3)),
   .hero-metrics,
   .summary-grid,
   .context-bar {
@@ -1228,7 +1223,7 @@ button {
   .login-layout,
   .form-grid,
   .workspace-grid,
-  .workspace-grid:has(.section-card:nth-child(3):not(.view-hidden)),
+  .workspace-grid:has(.section-card:nth-child(3)),
   .hero-metrics,
   .summary-grid,
   .context-bar,
