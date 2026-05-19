@@ -20,6 +20,7 @@
 | RQ-QA-03 | 教师增加、查看、修改、删除回答 | 需求获取 3.1.6；需求分析 Response 类 | `apps/server/src/modules/responses` `apps/web/src/App.tsx` `apps/mobile/App.tsx` | `apps/server/tests/feedback.integration.test.ts` |
 | RQ-COURSE-FB-01 | 学生对课程增加、修改、查看、删除反馈；教师查看自己课程反馈；教务员查看全部课程反馈 | 需求获取 3.1.7 | `apps/server/src/modules/course-feedbacks` `apps/web/src/App.tsx` `apps/mobile/App.tsx` | `apps/server/tests/course-feedbacks.integration.test.ts` |
 | RQ-GOV-01 | 教务员查看课程运行、用户、作业互动反馈与课程反馈总览 | 开题报告目标；需求获取 2.1、2.2、3.1.7 | `apps/server/src/modules/dashboard` `apps/web/src/features/officer/dashboard` `apps/mobile/src/features/officer/dashboard` | `apps/server/tests/dashboard.integration.test.ts` |
+| RQ-GOV-02 | 教务员账号管理最小集：查看全部账号（可按角色筛选）、禁用/恢复账号，禁用账号登录被拒，不可对自己执行 | 开题报告目标；需求获取 2.1；UX 改进 P1-7 | `apps/server/src/modules/users/routes.ts` `apps/server/src/modules/auth/routes.ts` `apps/web/src/features/officer/UserAdminSection.tsx` `apps/web/src/App.tsx` | `apps/server/tests/users-admin.integration.test.ts` |
 | RQ-NFR-01 | 响应时间目标：多数操作小于 1 秒，整体不超过 1.5 秒 | 需求获取 3.2.2 | `apps/server/src/lib/perf` `docs/TEST_PLAN.md` | `docs/TEST_REPORT.md` |
 | RQ-NFR-02 | 数据一致性、异常恢复、输入校验 | 需求获取 3.5；宪章 8/9/10/13 | `apps/server/src/lib/errors` `apps/server/src/lib/validation` `apps/server/src/lib/logging` | `apps/server/tests/*.test.ts` |
 | RQ-NFR-03 | Web 与移动端共享单一后端、保持同步 | 宪章 4.2、9；开题报告移动端复用后端 API | `packages/shared` `packages/types` `apps/web` `apps/mobile` `apps/server` | `apps/server/tests/sync.integration.test.ts` |
@@ -38,5 +39,6 @@
 - 教师回复、修改回复、删除回复
 - 课程反馈新增、修改、查看、删除
 - 三角色 dashboard 摘要
+- 教务员账号列表、按角色筛选、禁用 / 恢复（含登录阻断与不能禁用自己）
 
 验收自查详见 `docs/ACCEPTANCE_SELF_CHECK.md`。

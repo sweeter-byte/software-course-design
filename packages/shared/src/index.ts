@@ -137,6 +137,17 @@ export const responseSchema = z.object({
   content: z.string().min(2, '请输入回复内容'),
 })
 
+export const userStatusUpdateSchema = z.object({
+  disabled: z.boolean({
+    required_error: '请提供禁用状态',
+    invalid_type_error: '禁用状态必须为布尔值',
+  }),
+})
+
+export const userListQuerySchema = z.object({
+  role: z.enum(['student', 'teacher', 'officer']).optional(),
+})
+
 export const roleLabelMap = {
   student: '学生',
   teacher: '教师',

@@ -8,6 +8,7 @@ import { NotificationStack } from './components/notifications/NotificationStack'
 import { StatePanel } from './components/ui/StatePanel'
 import { createDefaultAssignmentDates } from './demo-defaults'
 import type {
+  AdminUserItem,
   AssignmentItem,
   CourseFeedbackItem,
   CourseItem,
@@ -19,6 +20,7 @@ import { AccountSection } from './features/account/AccountSection'
 import { LoginShell, type AuthMode } from './features/auth/LoginShell'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
+import { UserAdminSection } from './features/officer/UserAdminSection'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
 import { readInitialRuntimeState } from './runtime-state'
@@ -37,6 +39,7 @@ type WorkspaceView =
   | 'grading'
   | 'courseFeedbacks'
   | 'interaction'
+  | 'userAdmin'
   | 'account'
 
 const roleLabels: Record<UserRole, string> = {
@@ -67,6 +70,7 @@ const viewLabels: Record<WorkspaceView, string> = {
   grading: '教师任务',
   courseFeedbacks: '课程反馈',
   interaction: '互动交流',
+  userAdmin: '用户管理',
   account: '账号维护',
 }
 
@@ -91,6 +95,7 @@ const roleNavigation: Record<UserRole, Array<{ view: WorkspaceView; label: strin
     { view: 'dashboard', label: '工作台', hint: '平台运行总览' },
     { view: 'courses', label: '课程列表', hint: '课程查询与详情' },
     { view: 'courseAdmin', label: '课程维护', hint: '创建与修改课程' },
+    { view: 'userAdmin', label: '用户管理', hint: '账号列表与启停' },
     { view: 'courseFeedbacks', label: '反馈总览', hint: '课程反馈查看' },
     { view: 'account', label: '账号维护', hint: '资料与安全' },
   ],
@@ -252,6 +257,8 @@ function App() {
     dimension: 'teaching' as CourseFeedbackItem['dimension'],
     content: '教师讲解清晰，希望增加更多项目案例。',
   })
+  const [userAdminRoleFilter, setUserAdminRoleFilter] = useState<'' | UserRole>('')
+  const [userAdminPendingId, setUserAdminPendingId] = useState<string | null>(null)
   const currentRole = session?.user.role
   const navItems = currentRole ? roleNavigation[currentRole] : []
   const visibleView = navItems.some((item) => item.view === activeView) ? activeView : 'dashboard'
@@ -388,6 +395,24 @@ function App() {
       )
       return {
         items: payload.items as CourseFeedbackItem[],
+      }
+    },
+  })
+
+  const adminUsersQuery = useQuery({
+    enabled: Boolean(session && currentRole === 'officer'),
+    queryKey: ['adminUsers', apiBaseUrl, session?.accessToken, userAdminRoleFilter],
+    queryFn: async () => {
+      if (!session) {
+        return { users: [] as AdminUserItem[] }
+      }
+      const payload = await api.listAdminUsers(
+        apiBaseUrl,
+        session.accessToken,
+        userAdminRoleFilter || undefined,
+      )
+      return {
+        users: payload.users as AdminUserItem[],
       }
     },
   })
@@ -926,6 +951,32 @@ function App() {
     onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
 
+  const toggleUserStatusMutation = useMutation({
+    mutationFn: async (variables: { user: AdminUserItem; disabled: boolean }) => {
+      if (!session) return null
+      setUserAdminPendingId(variables.user.id)
+      return api.setUserDisabled(
+        apiBaseUrl,
+        session.accessToken,
+        variables.user.id,
+        variables.disabled,
+      )
+    },
+    onSuccess: (_data, variables) => {
+      notify({
+        type: 'success',
+        content: variables.disabled
+          ? `已禁用 ${variables.user.realName} 的账号。`
+          : `已恢复 ${variables.user.realName} 的账号。`,
+      })
+      queryClient.invalidateQueries({ queryKey: ['adminUsers'] })
+    },
+    onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
+    onSettled: () => {
+      setUserAdminPendingId(null)
+    },
+  })
+
   const courses = (coursesQuery.data?.items ?? []) as CourseItem[]
   const assignments = (assignmentsQuery.data?.items ?? []) as AssignmentItem[]
   const submissions = (submissionsQuery.data?.items ?? []) as SubmissionItem[]
@@ -1178,6 +1229,34 @@ function App() {
                   onSubmitPhoneChange={() => changePhoneMutation.mutate()}
                 />
               </SectionCard>
+
+              {currentRole === 'officer' ? (
+                <SectionCard
+                  title="用户管理"
+                  subtitle="查看全部账号，并按需禁用或恢复访问权限。"
+                  className={visibleView === 'userAdmin' ? 'wide-card' : 'view-hidden'}
+                >
+                  <UserAdminSection
+                    users={(adminUsersQuery.data?.users ?? []) as AdminUserItem[]}
+                    roleFilter={userAdminRoleFilter}
+                    isLoading={adminUsersQuery.isLoading}
+                    isToggling={toggleUserStatusMutation.isPending}
+                    currentUserId={session.user.id}
+                    pendingUserId={userAdminPendingId}
+                    onRoleFilterChange={setUserAdminRoleFilter}
+                    onToggle={(user) => {
+                      const nextDisabled = user.status !== 'disabled'
+                      const confirmMessage = nextDisabled
+                        ? `确认禁用 ${user.realName} 的账号吗？禁用后该账号无法登录。`
+                        : `确认恢复 ${user.realName} 的账号吗？恢复后该账号可立即登录。`
+                      if (!confirmDestructive(confirmMessage)) {
+                        return
+                      }
+                      toggleUserStatusMutation.mutate({ user, disabled: nextDisabled })
+                    }}
+                  />
+                </SectionCard>
+              ) : null}
 
 
               <SectionCard
@@ -2136,7 +2215,9 @@ function App() {
                 title="当前进度"
                 subtitle="帮助你快速查看当前课程、作业与提交状态。"
                 className={
-                  visibleView === 'account' || visibleView === 'courseAdmin'
+                  visibleView === 'account' ||
+                  visibleView === 'courseAdmin' ||
+                  visibleView === 'userAdmin'
                     ? 'view-hidden'
                     : 'current-progress-card'
                 }

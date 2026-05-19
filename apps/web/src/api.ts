@@ -556,4 +556,21 @@ export const api = {
       },
     )
   },
+  listAdminUsers(baseUrl: string, token: string, role?: UserRole) {
+    const query = role ? `?role=${encodeURIComponent(role)}` : ''
+    return requestJson<{ users: Array<Record<string, unknown>> }>(baseUrl, `/users${query}`, {
+      token,
+    })
+  },
+  setUserDisabled(baseUrl: string, token: string, userId: string, disabled: boolean) {
+    return requestJson<{ user: Record<string, unknown> }>(
+      baseUrl,
+      `/users/${userId}/status`,
+      {
+        method: 'PATCH',
+        token,
+        body: { disabled },
+      },
+    )
+  },
 }

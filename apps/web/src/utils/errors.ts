@@ -18,6 +18,10 @@ const friendlyMessages: Record<string, string> = {
   assignment_deadline_passed: '作业截止时间已过，不能继续提交或修改。',
   course_enrollment_required: '请先加入课程，再进行相关操作。',
   submission_id_required: '请先选择一条提交记录。',
+  account_disabled: '账号已被教务员禁用，请联系教务员恢复后再登录。',
+  account_cancelled: '该账号已注销，无法继续操作。',
+  cannot_modify_self: '不允许对自己执行该操作。',
+  user_not_found: '未找到该账号。',
   internal_server_error: '系统暂时繁忙，请稍后再试。',
 }
 

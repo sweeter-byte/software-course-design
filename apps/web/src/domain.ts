@@ -96,3 +96,21 @@ export type WorkspaceContext = {
   assignment: AssignmentItem | null
   submission: SubmissionItem | null
 }
+
+export type AdminUserItem = {
+  id: string
+  role: UserRole
+  status: 'active' | 'cancelled' | 'disabled'
+  phone: string
+  username: string
+  realName: string
+  email?: string | null
+  gender?: string | null
+  studentNo?: string | null
+  teacherNo?: string | null
+  college?: string | null
+  major?: string | null
+  className?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}

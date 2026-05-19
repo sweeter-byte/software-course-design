@@ -47,6 +47,9 @@
 - 说明：三角色登录
 - 请求体：`phone`, `password`
 - 返回：`accessToken`, `refreshToken`, `user`, `role`
+- 错误码：
+  - `401 INVALID_CREDENTIALS` 手机号不存在 / 已注销 / 密码错误
+  - `403 ACCOUNT_DISABLED` 账号被教务员禁用（密码已通过校验，仅状态阻断）
 
 ### POST `/auth/logout`
 
@@ -85,8 +88,23 @@
 
 ### GET `/users`
 
-- 说明：教务员查询账号
-- 查询参数：`role`, `keyword`, `status`, `page`, `pageSize`
+- 说明：教务员查询账号（教师/学生/教务员）
+- 鉴权：`officer`，非教务员返回 `403 FORBIDDEN`
+- 查询参数：`role`（可选，`student | teacher | officer`）
+- 响应字段：`data.users[]`，每项含 `id`, `role`, `status`（`active | disabled | cancelled`）, `phone`, `username`, `realName`, `email`, `gender`, `studentNo`, `teacherNo`, `college`, `major`, `className`, `createdAt`, `updatedAt`
+- 列表按 `created_at` 升序返回
+
+### PATCH `/users/:userId/status`
+
+- 说明：教务员禁用或恢复账号；禁用后该账号 `POST /auth/login` 在密码校验通过后会被 `ACCOUNT_DISABLED` 阻断
+- 鉴权：`officer`，非教务员返回 `403 FORBIDDEN`
+- 请求体：`{ "disabled": boolean }`
+- 副作用：禁用时清理该账号在 `auth_sessions` 中的会话；恢复时不重发 token，由该账号下次登录获取
+- 限制：
+  - 不允许对自己执行（`400 CANNOT_MODIFY_SELF`）
+  - 已注销账号不可启停（`409 ACCOUNT_CANCELLED`）
+  - 状态未变化时返回 `200 user_status_unchanged`
+- 成功响应 `message`：`user_disabled` 或 `user_enabled`，`data.user` 为更新后的资料（同 `GET /users/me` 的字段集合）
 
 ## 3. 课程
 

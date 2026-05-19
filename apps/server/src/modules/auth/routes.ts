@@ -240,7 +240,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
         }
       | undefined
 
-    if (!user || user.status !== 'active') {
+    if (!user || user.status === 'cancelled') {
       throw new AppError('invalid_credentials', 401, 'INVALID_CREDENTIALS')
     }
 
@@ -248,6 +248,10 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
 
     if (!passwordValid) {
       throw new AppError('invalid_credentials', 401, 'INVALID_CREDENTIALS')
+    }
+
+    if (user.status === 'disabled') {
+      throw new AppError('account_disabled', 403, 'ACCOUNT_DISABLED')
     }
 
     const tokens = await createSessionTokens(reply, context, user)

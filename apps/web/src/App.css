@@ -933,6 +933,46 @@ button {
   background: var(--success-soft);
 }
 
+.status-tag.status-disabled {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.status-tag.status-cancelled {
+  color: var(--text-muted);
+  background: rgba(15, 23, 42, 0.08);
+}
+
+.user-admin {
+  display: grid;
+  gap: 16px;
+}
+
+.user-admin-list {
+  display: grid;
+  gap: 12px;
+}
+
+.user-admin-card {
+  cursor: default;
+}
+
+.user-admin-card.status-disabled {
+  background: rgba(220, 38, 38, 0.04);
+  border-color: rgba(220, 38, 38, 0.16);
+}
+
+.user-admin-card.status-cancelled {
+  opacity: 0.7;
+}
+
+.user-admin-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .entity-card p,
 .entity-card small {
   margin: 0;
