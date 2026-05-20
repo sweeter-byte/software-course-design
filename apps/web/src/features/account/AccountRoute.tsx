@@ -1,7 +1,7 @@
 import { Suspense, lazy, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api } from '../../api'
+import { api, type SessionPayload } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import { confirmDestructive } from '../../utils/confirm'
@@ -13,24 +13,67 @@ const AccountSection = lazy(() =>
 
 interface AccountRouteProps {
   onSessionInvalidated: () => void
+  onPhoneChanged: () => void
+  onPasswordChanged: () => void
   onUpdateUser: (next: { phone?: string; username?: string; realName?: string }) => void
 }
 
-export function AccountRoute({ onSessionInvalidated, onUpdateUser }: AccountRouteProps) {
-  const { apiBaseUrl, session } = useAuth()
+type ProfileDraft = {
+  username: string
+  realName: string
+  email: string
+  gender: string
+  college: string
+  major: string
+  className: string
+}
 
-  // Per §0.4, personal-info fields are read-only here; the only edits are
-  // phone and password. So we just surface whatever the session knows.
-  const profileSummary = {
-    username: session.user.username,
-    realName: session.user.realName,
-    email: '',
-    gender: '',
-    college: '',
-    major: '',
-    className: '',
+function textValue(value: unknown) {
+  return typeof value === 'string' ? value : ''
+}
+
+function nullableText(value: string) {
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+function profileDraftFromUser(
+  user: Record<string, unknown> | undefined,
+  fallback: SessionPayload['user'],
+): ProfileDraft {
+  return {
+    username: textValue(user?.username) || fallback.username,
+    realName: textValue(user?.realName) || fallback.realName,
+    email: textValue(user?.email),
+    gender: textValue(user?.gender),
+    college: textValue(user?.college),
+    major: textValue(user?.major),
+    className: textValue(user?.className),
   }
+}
 
+function profileSyncKeyFromUser(user: Record<string, unknown> | undefined) {
+  return user ? String(user.updatedAt ?? user.id ?? user.username ?? '') : null
+}
+
+export function AccountRoute({
+  onSessionInvalidated,
+  onPhoneChanged,
+  onPasswordChanged,
+  onUpdateUser,
+}: AccountRouteProps) {
+  const { apiBaseUrl, session } = useAuth()
+  const queryClient = useQueryClient()
+
+  const currentUserQuery = useQuery({
+    queryKey: ['currentUser', apiBaseUrl, session.accessToken],
+    queryFn: async () => api.getCurrentUser(apiBaseUrl, session.accessToken),
+  })
+  const [profileDraft, setProfileDraft] = useState(() =>
+    profileDraftFromUser(undefined, session.user),
+  )
+  const [profileSyncKey, setProfileSyncKey] = useState<string | null>(null)
+  const [profileDirty, setProfileDirty] = useState(false)
   const [passwordDraft, setPasswordDraft] = useState({
     oldPassword: '',
     newPassword: '',
@@ -45,12 +88,52 @@ export function AccountRoute({ onSessionInvalidated, onUpdateUser }: AccountRout
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const currentUser = currentUserQuery.data?.user
+  const nextProfileSyncKey = profileSyncKeyFromUser(currentUser)
+  if (nextProfileSyncKey !== profileSyncKey) {
+    setProfileSyncKey(nextProfileSyncKey)
+    if (currentUser && !profileDirty) {
+      setProfileDraft(profileDraftFromUser(currentUser, session.user))
+    }
+  }
+  const queryError = currentUserQuery.isError
+    ? extractErrorMessage(currentUserQuery.error)
+    : null
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async () =>
+      api.updateProfile(apiBaseUrl, session.accessToken, {
+        username: profileDraft.username,
+        realName: profileDraft.realName,
+        email: nullableText(profileDraft.email),
+        gender: nullableText(profileDraft.gender),
+        college: nullableText(profileDraft.college),
+        major: nullableText(profileDraft.major),
+        className: nullableText(profileDraft.className),
+      }),
+    onSuccess: (payload) => {
+      const user = payload.user
+      const nextProfile = profileDraftFromUser(user, session.user)
+      setProfileDraft(nextProfile)
+      setProfileDirty(false)
+      setProfileSyncKey(profileSyncKeyFromUser(user))
+      onUpdateUser({
+        username: nextProfile.username,
+        realName: nextProfile.realName,
+      })
+      queryClient.setQueryData(['currentUser', apiBaseUrl, session.accessToken], payload)
+      queryClient.invalidateQueries({ queryKey: ['currentUser', apiBaseUrl, session.accessToken] })
+      setNotice('个人资料已保存。')
+      setError(null)
+    },
+    onError: (error) => setError(extractErrorMessage(error)),
+  })
+
   const changePasswordMutation = useMutation({
     mutationFn: async () => api.changePassword(apiBaseUrl, session.accessToken, passwordDraft),
     onSuccess: () => {
       setPasswordDraft({ oldPassword: '', newPassword: '', confirmPassword: '' })
-      setNotice('密码已修改，请妥善保管新密码。')
-      setError(null)
+      onPasswordChanged()
     },
     onError: (error) => setError(extractErrorMessage(error)),
   })
@@ -87,18 +170,8 @@ export function AccountRoute({ onSessionInvalidated, onUpdateUser }: AccountRout
 
   const changePhoneMutation = useMutation({
     mutationFn: async () => api.changePhone(apiBaseUrl, session.accessToken, phoneDraft),
-    onSuccess: (payload) => {
-      const user = payload.user as { phone?: unknown }
-      const nextPhone = String(user.phone)
-      onUpdateUser({ phone: nextPhone })
-      setPhoneDraft({
-        oldPhone: nextPhone,
-        oldVerificationCode: '',
-        newPhone: '',
-        newVerificationCode: '',
-      })
-      setNotice('手机号已修改。')
-      setError(null)
+    onSuccess: () => {
+      onPhoneChanged()
     },
     onError: (error) => setError(extractErrorMessage(error)),
   })
@@ -110,19 +183,25 @@ export function AccountRoute({ onSessionInvalidated, onUpdateUser }: AccountRout
         <p>查看个人资料、修改手机号或密码、注销当前账号。</p>
       </div>
       {notice ? <p className="info-banner">{notice}</p> : null}
-      {error ? <p className="error-banner">{error}</p> : null}
+      {error || queryError ? <p className="error-banner">{error ?? queryError}</p> : null}
       <Suspense fallback={<StatePanel title="账号维护加载中" detail="正在准备账号模块。" />}>
         <AccountSection
           phone={session.user.phone}
-          profile={profileSummary}
+          profile={profileDraft}
           password={passwordDraft}
           phoneChange={phoneDraft}
+          isProfilePending={updateProfileMutation.isPending || currentUserQuery.isFetching}
           isPasswordPending={changePasswordMutation.isPending}
           isCancelPending={cancelAccountMutation.isPending}
           isPhoneCodePending={phoneCodeMutation.isPending}
           isPhoneChangePending={changePhoneMutation.isPending}
+          onProfileChange={(nextProfile) => {
+            setProfileDirty(true)
+            setProfileDraft(nextProfile)
+          }}
           onPasswordChange={setPasswordDraft}
           onPhoneChange={setPhoneDraft}
+          onSubmitProfile={() => updateProfileMutation.mutate()}
           onSubmitPassword={() => changePasswordMutation.mutate()}
           onCancelAccount={() => {
             if (

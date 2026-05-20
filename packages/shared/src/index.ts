@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+const genderSchema = z.enum(['男', '女'], {
+  invalid_type_error: '性别只能选择男或女',
+})
+
 export const loginSchema = z.object({
   phone: z.string().min(11, '请输入手机号'),
   password: z.string().min(6, '密码至少 6 位'),
@@ -50,7 +54,7 @@ export const profileUpdateSchema = z
     username: z.string().min(2, '用户名至少 2 位').optional(),
     realName: z.string().min(2, '真实姓名至少 2 位').optional(),
     email: z.string().email('邮箱格式不正确').nullable().optional(),
-    gender: z.string().nullable().optional(),
+    gender: genderSchema.nullable().optional(),
     college: z.string().nullable().optional(),
     major: z.string().nullable().optional(),
     className: z.string().nullable().optional(),
@@ -67,6 +71,11 @@ export const studentRegisterSchema = z
     username: z.string().min(2, '用户名至少 2 位'),
     realName: z.string().min(2, '真实姓名至少 2 位'),
     studentId: z.string().min(4, '请输入学号'),
+    email: z.string().email('邮箱格式不正确').nullable().optional(),
+    gender: genderSchema.nullable().optional(),
+    college: z.string().nullable().optional(),
+    major: z.string().nullable().optional(),
+    className: z.string().nullable().optional(),
     verificationCode: z.string().min(4, '请输入验证码'),
   })
   .refine((value) => value.password === value.confirmPassword, {

@@ -41,4 +41,25 @@ describe('server health endpoint', () => {
       },
     })
   })
+
+  it('allows mutating API methods in CORS preflight responses', async () => {
+    const imported = await import('../src/app').catch(() => null)
+
+    expect(imported).not.toBeNull()
+
+    const app = await imported!.buildApp()
+    const response = await app.inject({
+      method: 'OPTIONS',
+      url: '/api/v1/users/me',
+      headers: {
+        origin: 'http://localhost:5174',
+        'access-control-request-method': 'PATCH',
+        'access-control-request-headers': 'authorization,content-type',
+      },
+    })
+
+    expect(response.statusCode).toBe(204)
+    expect(response.headers['access-control-allow-methods']).toContain('PATCH')
+    expect(response.headers['access-control-allow-methods']).toContain('DELETE')
+  })
 })

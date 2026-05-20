@@ -74,6 +74,11 @@ async function requestJson<T>(baseUrl: string, path: string, options: RequestOpt
   return payload.data as T
 }
 
+function nullableText(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? ''
+  return trimmed ? trimmed : null
+}
+
 export const api = {
   login(baseUrl: string, phone: string, password: string) {
     return requestJson<SessionPayload>(baseUrl, '/auth/login', {
@@ -100,12 +105,24 @@ export const api = {
       username: string
       realName: string
       studentId: string
+      email?: string | null
+      gender?: string | null
+      college?: string | null
+      major?: string | null
+      className?: string | null
       verificationCode: string
     },
   ) {
     return requestJson<{ user: { id: string } }>(baseUrl, '/auth/register/student', {
       method: 'POST',
-      body,
+      body: {
+        ...body,
+        email: nullableText(body.email),
+        gender: nullableText(body.gender),
+        college: nullableText(body.college),
+        major: nullableText(body.major),
+        className: nullableText(body.className),
+      },
     })
   },
   logout(baseUrl: string, token: string) {
@@ -162,6 +179,11 @@ export const api = {
   cancelAccount(baseUrl: string, token: string) {
     return requestJson<{ user: Record<string, unknown> }>(baseUrl, '/auth/cancel-account', {
       method: 'POST',
+      token,
+    })
+  },
+  getCurrentUser(baseUrl: string, token: string) {
+    return requestJson<{ user: Record<string, unknown> }>(baseUrl, '/users/me', {
       token,
     })
   },

@@ -5,6 +5,11 @@ export type StudentRegisterFormState = {
   username: string
   realName: string
   studentId: string
+  email: string
+  gender: string
+  college: string
+  major: string
+  className: string
   verificationCode: string
 }
 
@@ -92,6 +97,60 @@ export function StudentRegisterForm({
               title="真实姓名至少 2 位"
               value={values.realName}
               onChange={(event) => onChange({ ...values, realName: event.target.value })}
+            />
+          </label>
+          <label htmlFor="register-email">
+            邮箱
+            <input
+              id="register-email"
+              name="email"
+              type="email"
+              autoComplete="email"
+              value={values.email}
+              onChange={(event) => onChange({ ...values, email: event.target.value })}
+            />
+          </label>
+          <label htmlFor="register-gender">
+            性别
+            <select
+              id="register-gender"
+              name="gender"
+              value={values.gender}
+              onChange={(event) => onChange({ ...values, gender: event.target.value })}
+            >
+              <option value="">请选择</option>
+              <option value="男">男</option>
+              <option value="女">女</option>
+            </select>
+          </label>
+          <label htmlFor="register-college">
+            学院
+            <input
+              id="register-college"
+              name="college"
+              autoComplete="organization"
+              value={values.college}
+              onChange={(event) => onChange({ ...values, college: event.target.value })}
+            />
+          </label>
+          <label htmlFor="register-major">
+            专业
+            <input
+              id="register-major"
+              name="major"
+              autoComplete="off"
+              value={values.major}
+              onChange={(event) => onChange({ ...values, major: event.target.value })}
+            />
+          </label>
+          <label htmlFor="register-class-name">
+            班级
+            <input
+              id="register-class-name"
+              name="className"
+              autoComplete="off"
+              value={values.className}
+              onChange={(event) => onChange({ ...values, className: event.target.value })}
             />
           </label>
           <label htmlFor="register-password">

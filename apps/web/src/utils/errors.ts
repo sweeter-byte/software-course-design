@@ -22,6 +22,7 @@ const friendlyMessages: Record<string, string> = {
   account_cancelled: '该账号已注销，无法继续操作。',
   cannot_modify_self: '不允许对自己执行该操作。',
   user_not_found: '未找到该账号。',
+  cloudbase_verification_unavailable: '验证码服务暂时不可用，请稍后重试。',
   internal_server_error: '系统暂时繁忙，请稍后再试。',
 }
 

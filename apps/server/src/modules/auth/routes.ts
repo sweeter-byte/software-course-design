@@ -32,6 +32,12 @@ interface VerificationRecord {
   used_at: string | null
 }
 
+interface UserIdentityRecord {
+  id: string
+  role: 'student' | 'teacher' | 'officer'
+  status: 'active' | 'cancelled' | 'disabled'
+}
+
 function createVerificationCode() {
   return `${Math.floor(100000 + Math.random() * 900000)}`
 }
@@ -85,6 +91,25 @@ async function readCloudBaseJson(response: Response) {
   return (await response.json().catch(() => ({}))) as Record<string, unknown>
 }
 
+async function requestCloudBaseVerification(config: AppConfig, path: string, body: Record<string, unknown>) {
+  try {
+    return await fetch(`${getCloudBaseApiBaseUrl(config)}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${getCloudBaseApiToken(config)}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    })
+  } catch {
+    throw new AppError(
+      'cloudbase_verification_unavailable',
+      502,
+      'CLOUDBASE_VERIFICATION_UNAVAILABLE',
+    )
+  }
+}
+
 function throwCloudBaseError(status: number, payload: Record<string, unknown>, isVerificationCheck = false) {
   const error = typeof payload.error === 'string' ? payload.error : 'cloudbase_verification_failed'
   const description = typeof payload.error_description === 'string' ? payload.error_description : undefined
@@ -100,16 +125,9 @@ function throwCloudBaseError(status: number, payload: Record<string, unknown>, i
 }
 
 async function sendCloudBaseVerificationCode(config: AppConfig, phone: string) {
-  const response = await fetch(`${getCloudBaseApiBaseUrl(config)}/auth/v1/verification`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${getCloudBaseApiToken(config)}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      phone_number: formatCloudBasePhone(phone),
-      target: 'ANY',
-    }),
+  const response = await requestCloudBaseVerification(config, '/auth/v1/verification', {
+    phone_number: formatCloudBasePhone(phone),
+    target: 'ANY',
   })
 
   const payload = await readCloudBaseJson(response)
@@ -133,16 +151,9 @@ async function verifyCloudBaseVerificationCode(
   verificationId: string,
   verificationCode: string,
 ) {
-  const response = await fetch(`${getCloudBaseApiBaseUrl(config)}/auth/v1/verification/verify`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${getCloudBaseApiToken(config)}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      verification_id: verificationId,
-      verification_code: verificationCode,
-    }),
+  const response = await requestCloudBaseVerification(config, '/auth/v1/verification/verify', {
+    verification_id: verificationId,
+    verification_code: verificationCode,
   })
 
   const payload = await readCloudBaseJson(response)
@@ -294,55 +305,109 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
       payload.verificationCode,
     )
 
-    const phoneExists = context.database
-      .prepare('SELECT id FROM users WHERE phone = ? LIMIT 1')
-      .get(payload.phone) as { id: string } | undefined
+    const phoneOwner = context.database
+      .prepare('SELECT id, role, status FROM users WHERE phone = ? LIMIT 1')
+      .get(payload.phone) as UserIdentityRecord | undefined
 
-    if (phoneExists) {
+    if (phoneOwner && (phoneOwner.role !== 'student' || phoneOwner.status !== 'cancelled')) {
       throw new AppError('phone_already_registered', 409, 'PHONE_ALREADY_REGISTERED')
     }
 
-    const studentIdExists = context.database
-      .prepare('SELECT id FROM users WHERE student_no = ? LIMIT 1')
-      .get(payload.studentId) as { id: string } | undefined
+    const studentIdOwner = context.database
+      .prepare('SELECT id, role, status FROM users WHERE student_no = ? LIMIT 1')
+      .get(payload.studentId) as UserIdentityRecord | undefined
 
-    if (studentIdExists) {
+    if (studentIdOwner && (studentIdOwner.role !== 'student' || studentIdOwner.status !== 'cancelled')) {
+      throw new AppError('student_id_already_registered', 409, 'STUDENT_ID_ALREADY_REGISTERED')
+    }
+
+    if (phoneOwner && studentIdOwner && phoneOwner.id !== studentIdOwner.id) {
       throw new AppError('student_id_already_registered', 409, 'STUDENT_ID_ALREADY_REGISTERED')
     }
 
     const now = new Date().toISOString()
-    const userId = nanoid()
+    const reusableCancelledStudentId = phoneOwner?.id ?? studentIdOwner?.id
+    const userId = reusableCancelledStudentId ?? nanoid()
     const passwordHash = await hashPassword(payload.password)
+    const profileFields = {
+      email: payload.email ?? null,
+      gender: payload.gender ?? null,
+      college: payload.college ?? null,
+      major: payload.major ?? null,
+      className: payload.className ?? null,
+    }
 
-    context.database
-      .prepare(
-        `
-          INSERT INTO users (
-            id, role, status, phone, password_hash, username, real_name, email, gender,
-            student_no, teacher_no, college, major, class_name, created_at, updated_at
-          ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-          )
-        `,
-      )
-      .run(
-        userId,
-        'student',
-        'active',
-        payload.phone,
-        passwordHash,
-        payload.username,
-        payload.realName,
-        null,
-        null,
-        payload.studentId,
-        null,
-        null,
-        null,
-        null,
-        now,
-        now,
-      )
+    if (reusableCancelledStudentId) {
+      context.database
+        .prepare(
+          `
+            UPDATE users
+            SET
+              status = ?,
+              phone = ?,
+              password_hash = ?,
+              username = ?,
+              real_name = ?,
+              email = ?,
+              gender = ?,
+              student_no = ?,
+              teacher_no = ?,
+              college = ?,
+              major = ?,
+              class_name = ?,
+              updated_at = ?
+            WHERE id = ? AND role = ? AND status = ?
+          `,
+        )
+        .run(
+          'active',
+          payload.phone,
+          passwordHash,
+          payload.username,
+          payload.realName,
+          profileFields.email,
+          profileFields.gender,
+          payload.studentId,
+          null,
+          profileFields.college,
+          profileFields.major,
+          profileFields.className,
+          now,
+          reusableCancelledStudentId,
+          'student',
+          'cancelled',
+        )
+    } else {
+      context.database
+        .prepare(
+          `
+            INSERT INTO users (
+              id, role, status, phone, password_hash, username, real_name, email, gender,
+              student_no, teacher_no, college, major, class_name, created_at, updated_at
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+            )
+          `,
+        )
+        .run(
+          userId,
+          'student',
+          'active',
+          payload.phone,
+          passwordHash,
+          payload.username,
+          payload.realName,
+          profileFields.email,
+          profileFields.gender,
+          payload.studentId,
+          null,
+          profileFields.college,
+          profileFields.major,
+          profileFields.className,
+          now,
+          now,
+        )
+    }
 
     context.database
       .prepare('UPDATE verification_codes SET used_at = ? WHERE id = ?')
@@ -587,6 +652,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     context.database
       .prepare('UPDATE verification_codes SET used_at = ? WHERE id IN (?, ?)')
       .run(now, oldVerification.id, newVerification.id)
+    context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(user.id)
 
     context.logger.info('phone_changed', {
       requestId: request.id,

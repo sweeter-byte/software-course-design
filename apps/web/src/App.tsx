@@ -211,6 +211,11 @@ function App() {
     username: '',
     realName: '',
     studentId: '',
+    email: '',
+    gender: '',
+    college: '',
+    major: '',
+    className: '',
     verificationCode: '',
   })
   const [resetForm, setResetForm] = useState({
@@ -336,6 +341,14 @@ function App() {
     onSessionInvalidated: () => {
       clearSession()
       notify({ type: 'info', content: '账号已注销，后续需重新注册。' })
+    },
+    onPhoneChanged: () => {
+      clearSession()
+      notify({ type: 'success', content: '手机号已修改，请使用新手机号重新登录。' })
+    },
+    onPasswordChanged: () => {
+      clearSession()
+      notify({ type: 'success', content: '重置密码成功，请使用新密码重新登录。' })
     },
     onUpdateUser: (next: { phone?: string; username?: string; realName?: string }) =>
       setSession((current) =>

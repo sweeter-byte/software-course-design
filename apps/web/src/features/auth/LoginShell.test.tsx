@@ -12,6 +12,11 @@ const emptyRegisterForm = {
   username: '',
   realName: '',
   studentId: '',
+  email: '',
+  gender: '',
+  college: '',
+  major: '',
+  className: '',
   verificationCode: '',
 }
 const emptyResetForm = {
@@ -120,5 +125,10 @@ describe('LoginShell', () => {
     expect(screen.getByRole('heading', { name: '学生注册' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '获取验证码' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '完成注册' })).toBeInTheDocument()
+    expect(screen.getByLabelText('邮箱')).toBeInTheDocument()
+    expect(screen.getByLabelText('性别')).toBeInTheDocument()
+    expect(screen.getByLabelText('学院')).toBeInTheDocument()
+    expect(screen.getByLabelText('专业')).toBeInTheDocument()
+    expect(screen.getByLabelText('班级')).toBeInTheDocument()
   })
 })

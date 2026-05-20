@@ -119,6 +119,40 @@ function createCloudBaseInvalidCodeStub() {
   }
 }
 
+function createCloudBaseVerificationNetworkFailureStub() {
+  const originalFetch = globalThis.fetch
+
+  globalThis.fetch = async (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    const pathname = new URL(url).pathname
+
+    if (pathname === '/auth/v1/verification') {
+      return new Response(
+        JSON.stringify({
+          verification_id: 'cloudbase-verification-network-failure',
+          expires_in: 600,
+          is_user: false,
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      )
+    }
+
+    throw new TypeError('fetch failed')
+  }
+
+  return {
+    baseUrl: 'https://course-env.api.tcloudbasegateway.com',
+    restore: () => {
+      globalThis.fetch = originalFetch
+    },
+  }
+}
+
 describe('auth verification', () => {
   it('issues a development preview verification code for student registration', async () => {
     const { buildApp } = await import('../src/app')
@@ -325,6 +359,57 @@ describe('auth verification', () => {
         message: 'verification_code_invalid',
         error: {
           code: 'VERIFICATION_CODE_INVALID',
+        },
+      })
+
+      await app.close()
+    } finally {
+      cloudBase.restore()
+    }
+  })
+
+  it('maps CloudBase verification network failures to a verification service error', async () => {
+    const cloudBase = createCloudBaseVerificationNetworkFailureStub()
+
+    try {
+      const { buildApp } = await import('../src/app')
+      const app = await buildApp({
+        databasePath: ':memory:',
+        env: 'test',
+        verificationProvider: 'cloudbase',
+        cloudBaseApiBaseUrl: cloudBase.baseUrl,
+        cloudBaseApiToken: 'test-cloudbase-api-token',
+      })
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/verification-code',
+        payload: {
+          phone: '13800138090',
+          purpose: 'register',
+        },
+      })
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/register/student',
+        payload: {
+          phone: '13800138090',
+          password: 'Password123!',
+          confirmPassword: 'Password123!',
+          username: 'cloudbase_network_failure',
+          realName: '云开发网络错误',
+          studentId: '162350190',
+          verificationCode: '654321',
+        },
+      })
+
+      expect(response.statusCode).toBe(502)
+      expect(response.json()).toMatchObject({
+        success: false,
+        message: 'cloudbase_verification_unavailable',
+        error: {
+          code: 'CLOUDBASE_VERIFICATION_UNAVAILABLE',
         },
       })
 

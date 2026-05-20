@@ -17,11 +17,14 @@ type AccountSectionProps = {
   password: PasswordFormState
   phoneChange: PhoneChangeFormState
   isPasswordPending: boolean
+  isProfilePending: boolean
   isCancelPending: boolean
   isPhoneCodePending: boolean
   isPhoneChangePending: boolean
+  onProfileChange: (next: ProfileFormState) => void
   onPasswordChange: (next: PasswordFormState) => void
   onPhoneChange: (next: PhoneChangeFormState) => void
+  onSubmitProfile: () => void
   onSubmitPassword: () => void
   onCancelAccount: () => void
   onRequestPhoneCode: (target: 'old' | 'new') => void
@@ -31,7 +34,12 @@ type AccountSectionProps = {
 export function AccountSection(props: AccountSectionProps) {
   return (
     <>
-      <ProfileForm values={props.profile} />
+      <ProfileForm
+        values={props.profile}
+        isPending={props.isProfilePending}
+        onChange={props.onProfileChange}
+        onSubmit={props.onSubmitProfile}
+      />
       <PasswordForm
         values={props.password}
         phone={props.phone}
