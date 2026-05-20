@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import './App.css'
-import { ApiError, api, type SessionPayload } from './api'
+import { api, type SessionPayload } from './api'
 import { RoleShell } from './components/layout/RoleShell'
 import { AuthProvider } from './contexts/AuthContext'
 import { AccountRoute } from './features/account/AccountRoute'
@@ -40,7 +40,7 @@ import { useNotifications } from './hooks/useNotifications'
 import type { UserRole } from './domain'
 import { dashboardPath } from './routes/paths'
 import { readInitialRuntimeState } from './runtime-state'
-import { friendlyErrorMessage } from './utils/errors'
+import { extractErrorMessage } from './utils/errors'
 
 const DEFAULT_API_BASE_URL = 'http://localhost:4100/api/v1'
 
@@ -144,25 +144,31 @@ const OFFICER_COURSE_WORKSPACE_TABS = [
   { to: 'course-feedbacks', label: '课程反馈查看' },
 ] as const
 
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
+const PUBLIC_AUTH_PATHS = new Set<string>(['/login', '/register', '/forgot-password'])
+
+function pathToAuthMode(pathname: string): AuthMode {
+  if (pathname === '/register') return 'register'
+  if (pathname === '/forgot-password') return 'reset'
+  return 'login'
+}
+
+function authModeToPath(mode: AuthMode): string {
+  if (mode === 'register') return '/register'
+  if (mode === 'reset') return '/forgot-password'
+  return '/login'
 }
 
 function App() {
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
   const [initialRuntimeState] = useState(() =>
     readInitialRuntimeState(window.localStorage, DEFAULT_API_BASE_URL),
   )
   const apiBaseUrl = initialRuntimeState.apiBaseUrl
   const [session, setSession] = useState<SessionPayload | null>(initialRuntimeState.session)
-  const [authMode, setAuthMode] = useState<AuthMode>('login')
+  const authMode: AuthMode = pathToAuthMode(location.pathname)
+  const setAuthMode = (mode: AuthMode) => navigate(authModeToPath(mode), { replace: true })
   const { notifications, notify, dismiss: dismissNotification } = useNotifications()
 
   useEffect(() => {
@@ -181,7 +187,9 @@ function App() {
 
   useEffect(() => {
     if (!session) {
-      if (location.pathname !== '/login') {
+      // Per §1.1.1 / §1.1.5, anonymous users may sit on any of the three
+      // public auth paths. Any other path bounces them to /login.
+      if (!PUBLIC_AUTH_PATHS.has(location.pathname)) {
         navigate('/login', { replace: true })
       }
       return
@@ -259,6 +267,7 @@ function App() {
       notify({ type: 'success', content: '密码已重置，请使用新密码登录。' })
       setLoginForm({ phone: resetForm.phone, password: resetForm.newPassword })
       setResetForm({ phone: '', verificationCode: '', newPassword: '', confirmPassword: '' })
+      navigate('/login', { replace: true })
     },
     onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
@@ -266,12 +275,19 @@ function App() {
   const registerMutation = useMutation({
     mutationFn: async () => api.registerStudent(apiBaseUrl, registerForm),
     onSuccess: () => {
-      setAuthMode('login')
       notify({ type: 'success', content: '注册成功，请使用手机号和密码登录。' })
       setLoginForm({ phone: registerForm.phone, password: registerForm.password })
+      navigate('/login', { replace: true })
     },
     onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
   })
+
+  const clearSession = () => {
+    // §1.1.5: clear all TanStack Query caches so the next account never sees
+    // the previous one's data.
+    queryClient.clear()
+    setSession(null)
+  }
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -279,7 +295,7 @@ function App() {
       return api.logout(apiBaseUrl, session.accessToken)
     },
     onSuccess: () => {
-      setSession(null)
+      clearSession()
       notify({ type: 'info', content: '已退出当前账号。' })
     },
     onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),
@@ -316,6 +332,17 @@ function App() {
 
   const role = session.user.role
 
+  const accountRouteProps = {
+    onSessionInvalidated: () => {
+      clearSession()
+      notify({ type: 'info', content: '账号已注销，后续需重新注册。' })
+    },
+    onUpdateUser: (next: { phone?: string; username?: string; realName?: string }) =>
+      setSession((current) =>
+        current ? { ...current, user: { ...current.user, ...next } } : current,
+      ),
+  } as const
+
   return (
     <AuthProvider apiBaseUrl={apiBaseUrl} session={session}>
       <RoleShell
@@ -336,54 +363,9 @@ function App() {
           <Route path="/teacher/dashboard" element={<DashboardRoute />} />
           <Route path="/officer/dashboard" element={<DashboardRoute />} />
 
-          <Route
-            path="/student/account"
-            element={
-              <AccountRoute
-                onSessionInvalidated={() => {
-                  setSession(null)
-                  notify({ type: 'info', content: '账号已注销，后续需重新注册。' })
-                }}
-                onUpdateUser={(next) =>
-                  setSession((current) =>
-                    current ? { ...current, user: { ...current.user, ...next } } : current,
-                  )
-                }
-              />
-            }
-          />
-          <Route
-            path="/teacher/account"
-            element={
-              <AccountRoute
-                onSessionInvalidated={() => {
-                  setSession(null)
-                  notify({ type: 'info', content: '账号已注销，后续需重新注册。' })
-                }}
-                onUpdateUser={(next) =>
-                  setSession((current) =>
-                    current ? { ...current, user: { ...current.user, ...next } } : current,
-                  )
-                }
-              />
-            }
-          />
-          <Route
-            path="/officer/account"
-            element={
-              <AccountRoute
-                onSessionInvalidated={() => {
-                  setSession(null)
-                  notify({ type: 'info', content: '账号已注销，后续需重新注册。' })
-                }}
-                onUpdateUser={(next) =>
-                  setSession((current) =>
-                    current ? { ...current, user: { ...current.user, ...next } } : current,
-                  )
-                }
-              />
-            }
-          />
+          <Route path="/student/account" element={<AccountRoute {...accountRouteProps} />} />
+          <Route path="/teacher/account" element={<AccountRoute {...accountRouteProps} />} />
+          <Route path="/officer/account" element={<AccountRoute {...accountRouteProps} />} />
 
           {/* Student space (§2). */}
           <Route path="/student/courses" element={<StudentCourseListRoute />} />

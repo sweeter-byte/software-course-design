@@ -1,4 +1,4 @@
-import type { ValidationIssue } from '../api'
+import { ApiError, type ValidationIssue } from '../api'
 
 const friendlyMessages: Record<string, string> = {
   invalid_credentials: '手机号或密码不正确，请重新输入。',
@@ -94,6 +94,22 @@ function formatValidationDetails(details: ValidationIssue[]): string | null {
   }
 
   return `请检查填写内容：${parts.join('；')}。`
+}
+
+/**
+ * Funnel any thrown value into a user-facing string. Resolves ApiError
+ * details via friendlyErrorMessage, falls back to a generic phrase
+ * otherwise. Consolidates the copy that used to live verbatim in every
+ * feature component.
+ */
+export function extractErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    return friendlyErrorMessage(error.message, error.details)
+  }
+  if (error instanceof Error) {
+    return friendlyErrorMessage(error.message)
+  }
+  return '请求失败'
 }
 
 export function friendlyErrorMessage(message: string, details?: ValidationIssue[]) {
