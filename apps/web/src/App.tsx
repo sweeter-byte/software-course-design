@@ -16,8 +16,13 @@ import type {
   SubmissionItem,
   UserRole,
 } from './domain'
+import { AuthProvider } from './contexts/AuthContext'
 import { LoginShell, type AuthMode } from './features/auth/LoginShell'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
+import { CourseWorkspace } from './features/courseWorkspace/CourseWorkspace'
+import { StudentAssignmentDetailRoute } from './features/courseWorkspace/StudentAssignmentDetailRoute'
+import { StudentCourseAssignmentsTab } from './features/courseWorkspace/StudentCourseAssignmentsTab'
+import { StudentCourseOverviewTab } from './features/courseWorkspace/StudentCourseOverviewTab'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
@@ -99,10 +104,7 @@ interface NavItem {
  * through <RoutePlaceholder/> in step 1 and replaced with a real component in
  * later migration steps.
  */
-const STEP1_PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
-  '/student/courses/:courseId/overview',
-  '/student/courses/:courseId/assignments',
-  '/student/courses/:courseId/assignments/:assignmentId',
+const PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
   '/student/courses/:courseId/feedbacks',
   '/student/courses/:courseId/feedbacks/:feedbackId',
   '/student/courses/:courseId/course-feedbacks',
@@ -123,6 +125,13 @@ const STEP1_PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
   '/officer/users/teachers',
   '/officer/users/officers',
 ]
+
+const STUDENT_COURSE_WORKSPACE_TABS = [
+  { to: 'overview', label: '课程概览' },
+  { to: 'assignments', label: '作业' },
+  { to: 'feedbacks', label: '作业反馈' },
+  { to: 'course-feedbacks', label: '课程整体反馈' },
+] as const
 
 const roleNavigation: Record<UserRole, NavItem[]> = {
   student: [
@@ -1150,6 +1159,7 @@ function App() {
   }
 
   return (
+    <AuthProvider apiBaseUrl={apiBaseUrl} session={session}>
     <RoleShell
       user={session.user}
       roleLabel={roleLabels[session.user.role]}
@@ -1187,7 +1197,20 @@ function App() {
           <Route path="/student/courses/:courseId" element={<Navigate to="overview" replace />} />
           <Route path="/teacher/courses/:courseId" element={<Navigate to="overview" replace />} />
           <Route path="/officer/courses/:courseId" element={<Navigate to="overview" replace />} />
-          {STEP1_PLACEHOLDER_ROUTES.map((path) => (
+
+          {/* Student course workspace (§2.2). Overview + Assignments tabs
+              are migrated; the rest still falls through to placeholders. */}
+          <Route
+            path="/student/courses/:courseId"
+            element={<CourseWorkspace role="student" tabs={STUDENT_COURSE_WORKSPACE_TABS} />}
+          >
+            <Route path="overview" element={<StudentCourseOverviewTab />} />
+            <Route path="assignments" element={<StudentCourseAssignmentsTab />}>
+              <Route path=":assignmentId" element={<StudentAssignmentDetailRoute />} />
+            </Route>
+          </Route>
+
+          {PLACEHOLDER_ROUTES.map((path) => (
             <Route key={path} path={path} element={<RoutePlaceholder route={path} />} />
           ))}
           <Route
@@ -1357,6 +1380,10 @@ function App() {
                         className={selectedCourseId === course.id ? 'entity-card active' : 'entity-card'}
                         type="button"
                         onClick={() => {
+                          if (currentRole === 'student' && course.enrolled) {
+                            navigate(`/student/courses/${course.id}`)
+                            return
+                          }
                           startTransition(() => {
                             setSelectedCourseId(course.id)
                             resetBelowCourse()
@@ -2211,6 +2238,7 @@ function App() {
           />
         </Routes>
     </RoleShell>
+    </AuthProvider>
   )
 }
 
