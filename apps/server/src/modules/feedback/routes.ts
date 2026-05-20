@@ -135,6 +135,13 @@ function getFeedbackById(database: DatabaseSync, feedbackId: string) {
     .get(feedbackId) as FeedbackRow | undefined
 }
 
+function feedbackHasTeacherResponse(database: DatabaseSync, feedbackId: string) {
+  const row = database
+    .prepare('SELECT 1 AS present FROM responses WHERE feedback_id = ? LIMIT 1')
+    .get(feedbackId) as { present: number } | undefined
+  return row !== undefined
+}
+
 export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRouteContext) {
   app.get('/feedbacks/threads', async (request) => {
     const actor = await requireAuth(request)
@@ -462,6 +469,14 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
       throw new AppError('forbidden', 403, 'FORBIDDEN')
     }
 
+    if (feedbackHasTeacherResponse(context.database, params.feedbackId)) {
+      throw new AppError(
+        'feedback_locked_by_response',
+        409,
+        'FEEDBACK_LOCKED_BY_RESPONSE',
+      )
+    }
+
     const now = new Date().toISOString()
 
     context.database
@@ -503,6 +518,14 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
 
     if (feedback.student_id !== actor.sub) {
       throw new AppError('forbidden', 403, 'FORBIDDEN')
+    }
+
+    if (feedbackHasTeacherResponse(context.database, params.feedbackId)) {
+      throw new AppError(
+        'feedback_locked_by_response',
+        409,
+        'FEEDBACK_LOCKED_BY_RESPONSE',
+      )
     }
 
     const now = new Date().toISOString()

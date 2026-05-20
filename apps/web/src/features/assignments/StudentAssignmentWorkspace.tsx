@@ -7,6 +7,12 @@ import { formatDateTimeForDisplay } from '../../utils/date'
 import { feedbackStatusLabel } from '../../utils/feedback-status'
 import { submissionStatusLabel } from '../../utils/submission-status'
 
+type EditingFeedback = {
+  id: string
+  kind: 'question' | 'feedback'
+  content: string
+}
+
 type StudentAssignmentWorkspaceProps = {
   assignment: AssignmentItem | null
   feedbacks: FeedbackItem[]
@@ -16,12 +22,21 @@ type StudentAssignmentWorkspaceProps = {
   isSubmitting: boolean
   isUpdating: boolean
   isPostingFeedback: boolean
+  editingFeedback?: EditingFeedback | null
+  isSavingFeedback?: boolean
+  deletingFeedbackId?: string | null
   onSubmissionContentChange: (value: string) => void
   onSubmitAnswer: () => void
   onUpdateAnswer: () => void
   onFeedbackKindChange: (value: 'question' | 'feedback') => void
   onFeedbackContentChange: (value: string) => void
   onPostFeedback: () => void
+  onStartEditFeedback?: (feedback: FeedbackItem) => void
+  onCancelEditFeedback?: () => void
+  onEditFeedbackKindChange?: (value: 'question' | 'feedback') => void
+  onEditFeedbackContentChange?: (value: string) => void
+  onSaveFeedbackEdit?: () => void
+  onDeleteFeedback?: (feedbackId: string) => void
 }
 
 export function StudentAssignmentWorkspace({
@@ -33,12 +48,21 @@ export function StudentAssignmentWorkspace({
   isSubmitting,
   isUpdating,
   isPostingFeedback,
+  editingFeedback = null,
+  isSavingFeedback = false,
+  deletingFeedbackId = null,
   onSubmissionContentChange,
   onSubmitAnswer,
   onUpdateAnswer,
   onFeedbackKindChange,
   onFeedbackContentChange,
   onPostFeedback,
+  onStartEditFeedback,
+  onCancelEditFeedback,
+  onEditFeedbackKindChange,
+  onEditFeedbackContentChange,
+  onSaveFeedbackEdit,
+  onDeleteFeedback,
 }: StudentAssignmentWorkspaceProps) {
   // Snapshot wall-clock on first mount so React 19's lint rule doesn't flag
   // Date.now() as impure during render. The lock state re-evaluates whenever
@@ -203,15 +227,100 @@ export function StudentAssignmentWorkspace({
 
       <div className="thread-stack">
         {feedbacks.length > 0 ? (
-          feedbacks.map((feedback) => (
-            <article key={feedback.id} className="thread-card">
-              <div className="thread-meta">
-                <span>{feedback.kind === 'question' ? '学生问题' : '学生反馈'}</span>
-                <strong>{feedbackStatusLabel(feedback.status)}</strong>
-              </div>
-              <p>{feedback.content}</p>
-            </article>
-          ))
+          feedbacks.map((feedback) => {
+            const hasTeacherResponse = feedback.responses.length > 0
+            const isEditing = editingFeedback?.id === feedback.id
+            const isDeleting = deletingFeedbackId === feedback.id
+            const canModify = !hasTeacherResponse && onStartEditFeedback != null
+            return (
+              <article key={feedback.id} className="thread-card">
+                <div className="thread-meta">
+                  <span>{feedback.kind === 'question' ? '学生问题' : '学生反馈'}</span>
+                  <strong>{feedbackStatusLabel(feedback.status)}</strong>
+                </div>
+                {isEditing ? (
+                  <form
+                    className="stack-form"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      onSaveFeedbackEdit?.()
+                    }}
+                  >
+                    <label htmlFor={`feedback-edit-kind-${feedback.id}`}>
+                      类型
+                      <select
+                        id={`feedback-edit-kind-${feedback.id}`}
+                        value={editingFeedback.kind}
+                        onChange={(event) =>
+                          onEditFeedbackKindChange?.(event.target.value as 'question' | 'feedback')
+                        }
+                      >
+                        <option value="question">问题</option>
+                        <option value="feedback">反馈</option>
+                      </select>
+                    </label>
+                    <label htmlFor={`feedback-edit-content-${feedback.id}`}>
+                      内容
+                      <textarea
+                        id={`feedback-edit-content-${feedback.id}`}
+                        required
+                        minLength={2}
+                        value={editingFeedback.content}
+                        onChange={(event) => onEditFeedbackContentChange?.(event.target.value)}
+                      />
+                    </label>
+                    <div className="inline-row">
+                      <button className="primary-button" type="submit" disabled={isSavingFeedback}>
+                        {isSavingFeedback ? '保存中...' : '保存修改'}
+                      </button>
+                      <button
+                        className="ghost-button"
+                        type="button"
+                        onClick={() => onCancelEditFeedback?.()}
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <p>{feedback.content}</p>
+                    {canModify ? (
+                      <div className="inline-row">
+                        <button
+                          className="ghost-button"
+                          type="button"
+                          onClick={() => onStartEditFeedback?.(feedback)}
+                        >
+                          修改
+                        </button>
+                        <button
+                          className="danger-button"
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={() => onDeleteFeedback?.(feedback.id)}
+                        >
+                          {isDeleting ? '删除中...' : '删除'}
+                        </button>
+                      </div>
+                    ) : hasTeacherResponse ? (
+                      <p className="muted-paragraph">教师已回复，本条不能再修改或删除。</p>
+                    ) : null}
+                  </>
+                )}
+                {hasTeacherResponse ? (
+                  <ul className="response-list">
+                    {feedback.responses.map((response) => (
+                      <li key={response.id} className="thread-response">
+                        <span>{response.teacherName ?? '教师'}</span>
+                        <p>{response.content}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </article>
+            )
+          })
         ) : (
           <StatePanel title="暂无作业互动" detail="批改完成后，可在这里查看本作业的问题、反馈和教师回复。" />
         )}

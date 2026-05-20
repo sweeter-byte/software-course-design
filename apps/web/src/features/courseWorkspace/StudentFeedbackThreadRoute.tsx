@@ -115,12 +115,12 @@ export function StudentFeedbackThreadRoute() {
           <h3>我的问题/反馈</h3>
           <p>
             {teacherAlreadyAnswered
-              ? '该内容已有教师回答，修改或删除可能影响上下文。'
-              : '可以修改或删除本条反馈。'}
+              ? '教师已回复，本条内容已锁定，不能再修改或删除。'
+              : '教师回复前可以修改或删除本条反馈。'}
           </p>
         </div>
         {error ? <p className="error-banner">{error}</p> : null}
-        {editing ? (
+        {editing && !teacherAlreadyAnswered ? (
           <form
             className="stack-form"
             onSubmit={(event) => {
@@ -173,27 +173,29 @@ export function StudentFeedbackThreadRoute() {
         ) : (
           <>
             <p className="thread-content">{thread.content}</p>
-            <div className="inline-row">
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => setDraft({ kind: thread.kind, content: thread.content })}
-              >
-                修改
-              </button>
-              <button
-                className="danger-button"
-                type="button"
-                disabled={deleteMutation.isPending}
-                onClick={() => {
-                  if (confirmDestructive('确认删除该问题/反馈吗？删除后无法恢复。')) {
-                    deleteMutation.mutate()
-                  }
-                }}
-              >
-                {deleteMutation.isPending ? '删除中...' : '删除'}
-              </button>
-            </div>
+            {teacherAlreadyAnswered ? null : (
+              <div className="inline-row">
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => setDraft({ kind: thread.kind, content: thread.content })}
+                >
+                  修改
+                </button>
+                <button
+                  className="danger-button"
+                  type="button"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => {
+                    if (confirmDestructive('确认删除该问题/反馈吗？删除后无法恢复。')) {
+                      deleteMutation.mutate()
+                    }
+                  }}
+                >
+                  {deleteMutation.isPending ? '删除中...' : '删除'}
+                </button>
+              </div>
+            )}
           </>
         )}
       </section>

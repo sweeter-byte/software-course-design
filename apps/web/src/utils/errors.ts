@@ -13,6 +13,7 @@ const friendlyMessages: Record<string, string> = {
   forbidden: '当前账号暂无此操作权限。',
   not_found: '未找到对应内容。',
   feedback_requires_grading: '该提交尚未批改，批改后才能发起作业问题或反馈。',
+  feedback_locked_by_response: '教师已回复，问题/反馈不能再修改或删除。',
   submission_already_graded: '该提交已批改，不能再修改答案。',
   assignment_already_submitted: '该作业已经提交，不能重复提交。',
   assignment_deadline_passed: '作业截止时间已过，不能继续提交或修改。',

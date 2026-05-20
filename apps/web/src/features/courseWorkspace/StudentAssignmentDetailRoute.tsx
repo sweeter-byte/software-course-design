@@ -7,6 +7,7 @@ import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import { useNotify } from '../../contexts/useNotify'
 import type { AssignmentItem, CourseItem, FeedbackItem } from '../../domain'
+import { confirmDestructive } from '../../utils/confirm'
 import { extractErrorMessage } from '../../utils/errors'
 import { StudentAssignmentWorkspace } from '../assignments/StudentAssignmentWorkspace'
 
@@ -27,6 +28,12 @@ export function StudentAssignmentDetailRoute() {
     kind: 'question',
     content: '',
   })
+  const [editingFeedback, setEditingFeedback] = useState<{
+    id: string
+    kind: 'question' | 'feedback'
+    content: string
+  } | null>(null)
+  const [deletingFeedbackId, setDeletingFeedbackId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const assignmentsQuery = useQuery<{ items: AssignmentItem[] }>({
@@ -109,6 +116,45 @@ export function StudentAssignmentDetailRoute() {
     onError: (error) => setError(extractErrorMessage(error)),
   })
 
+  const updateFeedbackMutation = useMutation({
+    mutationFn: async () => {
+      if (!editingFeedback) return null
+      return api.updateFeedback(
+        apiBaseUrl,
+        session.accessToken,
+        editingFeedback.id,
+        editingFeedback.kind,
+        editingFeedback.content,
+      )
+    },
+    onSuccess: () => {
+      setError(null)
+      setEditingFeedback(null)
+      notify({ type: 'success', content: '已更新本条问题/反馈。' })
+      queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
+    },
+    onError: (error) => setError(extractErrorMessage(error)),
+  })
+
+  const deleteFeedbackMutation = useMutation({
+    mutationFn: async (feedbackId: string) => {
+      setDeletingFeedbackId(feedbackId)
+      return api.deleteFeedback(apiBaseUrl, session.accessToken, feedbackId)
+    },
+    onSuccess: (_payload, feedbackId) => {
+      setError(null)
+      if (editingFeedback?.id === feedbackId) {
+        setEditingFeedback(null)
+      }
+      notify({ type: 'success', content: '已删除本条问题/反馈。' })
+      queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
+      queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
+    },
+    onError: (error) => setError(extractErrorMessage(error)),
+    onSettled: () => setDeletingFeedbackId(null),
+  })
+
   if (assignmentsQuery.isLoading) {
     return <StatePanel title="作业加载中" detail="正在获取作业详情。" />
   }
@@ -149,6 +195,9 @@ export function StudentAssignmentDetailRoute() {
         isSubmitting={createSubmissionMutation.isPending}
         isUpdating={updateSubmissionMutation.isPending}
         isPostingFeedback={createFeedbackMutation.isPending}
+        editingFeedback={editingFeedback}
+        isSavingFeedback={updateFeedbackMutation.isPending}
+        deletingFeedbackId={deletingFeedbackId}
         onSubmissionContentChange={setSubmissionContent}
         onSubmitAnswer={() => createSubmissionMutation.mutate()}
         onUpdateAnswer={() => updateSubmissionMutation.mutate()}
@@ -157,6 +206,22 @@ export function StudentAssignmentDetailRoute() {
           setFeedbackDraft((current) => ({ ...current, content }))
         }
         onPostFeedback={() => createFeedbackMutation.mutate()}
+        onStartEditFeedback={(feedback) =>
+          setEditingFeedback({ id: feedback.id, kind: feedback.kind, content: feedback.content })
+        }
+        onCancelEditFeedback={() => setEditingFeedback(null)}
+        onEditFeedbackKindChange={(kind) =>
+          setEditingFeedback((current) => (current ? { ...current, kind } : current))
+        }
+        onEditFeedbackContentChange={(content) =>
+          setEditingFeedback((current) => (current ? { ...current, content } : current))
+        }
+        onSaveFeedbackEdit={() => updateFeedbackMutation.mutate()}
+        onDeleteFeedback={(feedbackId) => {
+          if (confirmDestructive('确认删除该问题/反馈吗？删除后无法恢复。')) {
+            deleteFeedbackMutation.mutate(feedbackId)
+          }
+        }}
       />
     </div>
   )

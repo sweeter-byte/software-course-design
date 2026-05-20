@@ -72,7 +72,8 @@ async function buildFeedbackApp() {
   }
 }
 
-async function createFeedbackThread() {
+async function createFeedbackThread(options: { withResponse?: boolean } = {}) {
+  const withResponse = options.withResponse ?? true
   const { app, officerToken, teacherToken, studentToken } = await buildFeedbackApp()
 
   const courseResponse = await app.inject({
@@ -157,17 +158,20 @@ async function createFeedbackThread() {
   })
   const feedbackId = feedbackResponse.json().data.feedback.id as string
 
-  const responseResponse = await app.inject({
-    method: 'POST',
-    url: `/api/v1/feedbacks/${feedbackId}/responses`,
-    headers: {
-      authorization: `Bearer ${teacherToken}`,
-    },
-    payload: {
-      content: '原始回答内容。',
-    },
-  })
-  const responseId = responseResponse.json().data.response.id as string
+  let responseId: string | null = null
+  if (withResponse) {
+    const responseResponse = await app.inject({
+      method: 'POST',
+      url: `/api/v1/feedbacks/${feedbackId}/responses`,
+      headers: {
+        authorization: `Bearer ${teacherToken}`,
+      },
+      payload: {
+        content: '原始回答内容。',
+      },
+    })
+    responseId = responseResponse.json().data.response.id as string
+  }
 
   return {
     app,
@@ -823,8 +827,8 @@ describe('feedback threads', () => {
     ])
   })
 
-  it('allows a student to update their own feedback', async () => {
-    const { app, studentToken, feedbackId } = await createFeedbackThread()
+  it('allows a student to update their own feedback before a teacher reply', async () => {
+    const { app, studentToken, feedbackId } = await createFeedbackThread({ withResponse: false })
 
     const response = await app.inject({
       method: 'PATCH',
@@ -852,8 +856,10 @@ describe('feedback threads', () => {
     })
   })
 
-  it('allows a student to delete their own feedback and hides it from the thread', async () => {
-    const { app, studentToken, submissionId, feedbackId } = await createFeedbackThread()
+  it('allows a student to delete their own feedback before a teacher reply and hides it from the thread', async () => {
+    const { app, studentToken, submissionId, feedbackId } = await createFeedbackThread({
+      withResponse: false,
+    })
 
     const deleteResponse = await app.inject({
       method: 'DELETE',
@@ -885,6 +891,52 @@ describe('feedback threads', () => {
 
     expect(listResponse.statusCode).toBe(200)
     expect(listResponse.json().data.items).toEqual([])
+  })
+
+  it('rejects student updates to feedback once a teacher has replied', async () => {
+    const { app, studentToken, feedbackId } = await createFeedbackThread()
+
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/feedbacks/${feedbackId}`,
+      headers: {
+        authorization: `Bearer ${studentToken}`,
+      },
+      payload: {
+        kind: 'feedback',
+        content: '已被回答后再修改。',
+      },
+    })
+
+    expect(response.statusCode).toBe(409)
+    expect(response.json()).toMatchObject({
+      success: false,
+      message: 'feedback_locked_by_response',
+      error: {
+        code: 'FEEDBACK_LOCKED_BY_RESPONSE',
+      },
+    })
+  })
+
+  it('rejects student deletes of feedback once a teacher has replied', async () => {
+    const { app, studentToken, feedbackId } = await createFeedbackThread()
+
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/feedbacks/${feedbackId}`,
+      headers: {
+        authorization: `Bearer ${studentToken}`,
+      },
+    })
+
+    expect(response.statusCode).toBe(409)
+    expect(response.json()).toMatchObject({
+      success: false,
+      message: 'feedback_locked_by_response',
+      error: {
+        code: 'FEEDBACK_LOCKED_BY_RESPONSE',
+      },
+    })
   })
 
   it('allows a teacher to update their own response', async () => {
