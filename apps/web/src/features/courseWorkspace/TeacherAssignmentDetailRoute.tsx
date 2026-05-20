@@ -26,6 +26,10 @@ export function TeacherAssignmentDetailRoute() {
   const { assignmentId } = useParams<{ assignmentId: string }>()
   const { apiBaseUrl, session } = useAuth()
   const queryClient = useQueryClient()
+  // Snapshot wall-clock on mount so React 19's lint rule doesn't flag
+  // Date.now() as impure during render. The :assignmentId param change
+  // remounts this route, so the lock state re-evaluates per assignment.
+  const [nowMs] = useState(() => Date.now())
 
   const assignmentsQuery = useQuery<{ items: AssignmentItem[] }>({
     queryKey: ['assignments', apiBaseUrl, session.accessToken, course.id],
@@ -99,7 +103,7 @@ export function TeacherAssignmentDetailRoute() {
   const pendingCount = submissions.filter((item) => item.status === 'submitted').length
   const isCancelled = assignment.status === 'cancelled'
   const dueAtMs = Date.parse(assignment.dueAt)
-  const isPastDue = Number.isFinite(dueAtMs) ? dueAtMs <= Date.now() : false
+  const isPastDue = Number.isFinite(dueAtMs) ? dueAtMs <= nowMs : false
   const hasAnySubmission = submissions.length > 0
   // §3.3.2 / §5.3: teachers may modify an assignment only before the deadline
   // AND while no student has submitted yet. Cancelled is always locked.

@@ -2,11 +2,11 @@ import { useDeferredValue, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
-import type { CourseItem } from '../../domain'
-import { friendlyErrorMessage } from '../../utils/errors'
+import type { AdminUserItem, CourseItem } from '../../domain'
+import { extractErrorMessage } from '../../utils/errors'
 
 const STATUS_LABELS: Record<string, string> = {
   not_started: '未开始',
@@ -23,16 +23,6 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'completed', label: '已结课' },
   { value: 'suspended', label: '暂停' },
 ]
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
-}
 
 interface DraftState {
   courseCode: string
@@ -70,9 +60,11 @@ export function OfficerCourseListRoute() {
   const [keyword, setKeyword] = useState('')
   const [semester, setSemester] = useState('')
   const [status, setStatus] = useState('')
+  const [teacherId, setTeacherId] = useState('')
   const deferredKeyword = useDeferredValue(keyword)
   const deferredSemester = useDeferredValue(semester)
   const deferredStatus = useDeferredValue(status)
+  const deferredTeacherId = useDeferredValue(teacherId)
   const [draft, setDraft] = useState<DraftState>(() => makeBlankDraft())
   const [showCreate, setShowCreate] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,16 +77,28 @@ export function OfficerCourseListRoute() {
       deferredKeyword,
       deferredSemester,
       deferredStatus,
+      deferredTeacherId,
     ],
     queryFn: async () => {
       const payload = await api.listCourses(apiBaseUrl, session.accessToken, {
         keyword: deferredKeyword,
         semester: deferredSemester,
         status: deferredStatus,
+        teacherId: deferredTeacherId,
       })
       return { items: payload.items as CourseItem[] }
     },
   })
+
+  const teachersQuery = useQuery<{ users: AdminUserItem[] }>({
+    queryKey: ['adminUsers', apiBaseUrl, session.accessToken, 'teacher'],
+    queryFn: async () => {
+      const payload = await api.listAdminUsers(apiBaseUrl, session.accessToken, 'teacher')
+      return { users: payload.users as AdminUserItem[] }
+    },
+  })
+
+  const teachers = teachersQuery.data?.users ?? []
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -164,6 +168,22 @@ export function OfficerCourseListRoute() {
               {STATUS_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label htmlFor="officer-course-teacher">
+            授课教师
+            <select
+              id="officer-course-teacher"
+              value={teacherId}
+              onChange={(event) => setTeacherId(event.target.value)}
+            >
+              <option value="">全部教师</option>
+              {teachers.map((teacher) => (
+                <option key={teacher.id} value={teacher.id}>
+                  {teacher.realName}
+                  {teacher.teacherNo ? `（${teacher.teacherNo}）` : ''}
                 </option>
               ))}
             </select>

@@ -163,9 +163,15 @@ export function TeacherFeedbackThreadRoute() {
           <StatePanel title="尚无回复" detail="使用下方表单发布回复。" />
         ) : (
           <ul className="response-list">
-            {thread.responses.map((response) => (
+            {thread.responses.map((response) => {
+              // §3.3.4 / §5.6: 修改 / 删除 仅限自己发布的回答。
+              const isMine = response.teacherId === session.user.id
+              return (
               <li key={response.id} className="thread-response">
-                <span>{response.teacherName ?? '教师'}</span>
+                <span>
+                  {response.teacherName ?? '教师'}
+                  {isMine ? '（我）' : ''}
+                </span>
                 {editingResponseId === response.id ? (
                   <form
                     className="inline-form"
@@ -205,6 +211,7 @@ export function TeacherFeedbackThreadRoute() {
                     {response.createdAt ? (
                       <small>{formatDateTimeForDisplay(response.createdAt)}</small>
                     ) : null}
+                    {isMine ? (
                     <div className="inline-row">
                       <button
                         className="ghost-button"
@@ -229,10 +236,12 @@ export function TeacherFeedbackThreadRoute() {
                         删除
                       </button>
                     </div>
+                    ) : null}
                   </>
                 )}
               </li>
-            ))}
+              )
+            })}
           </ul>
         )}
 

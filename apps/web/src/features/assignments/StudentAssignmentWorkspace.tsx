@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import { StatePanel } from '../../components/ui/StatePanel'
 import type { AssignmentItem, FeedbackItem } from '../../domain'
 import { formatDateTimeForDisplay } from '../../utils/date'
@@ -35,6 +37,12 @@ export function StudentAssignmentWorkspace({
   onFeedbackContentChange,
   onPostFeedback,
 }: StudentAssignmentWorkspaceProps) {
+  // Snapshot wall-clock on first mount so React 19's lint rule doesn't flag
+  // Date.now() as impure during render. The lock state re-evaluates whenever
+  // the user navigates to a different assignment (because the parent
+  // assignment detail route remounts this component via React Router).
+  const [nowMs] = useState(() => Date.now())
+
   if (!assignment) {
     return <StatePanel title="请选择作业" detail="先在左侧选择作业，再提交答案、查看成绩或发起反馈。" />
   }
@@ -43,7 +51,7 @@ export function StudentAssignmentWorkspace({
   const isGraded = submission?.status === 'graded'
   const isCancelled = assignment.status === 'cancelled'
   const dueAtMs = Date.parse(assignment.dueAt)
-  const isPastDue = Number.isFinite(dueAtMs) ? dueAtMs <= Date.now() : false
+  const isPastDue = Number.isFinite(dueAtMs) ? dueAtMs <= nowMs : false
   // §2.4: students may modify the answer only before the deadline AND before
   // it has been graded. Cancelled assignments cannot be edited either.
   const canEditSubmission = !isGraded && !isCancelled && !isPastDue
