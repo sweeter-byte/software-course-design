@@ -98,6 +98,19 @@ export function TeacherAssignmentDetailRoute() {
   const gradedCount = submissions.filter((item) => item.status === 'graded').length
   const pendingCount = submissions.filter((item) => item.status === 'submitted').length
   const isCancelled = assignment.status === 'cancelled'
+  const dueAtMs = Date.parse(assignment.dueAt)
+  const isPastDue = Number.isFinite(dueAtMs) ? dueAtMs <= Date.now() : false
+  const hasAnySubmission = submissions.length > 0
+  // §3.3.2 / §5.3: teachers may modify an assignment only before the deadline
+  // AND while no student has submitted yet. Cancelled is always locked.
+  const canEditAssignment = !isCancelled && !isPastDue && !hasAnySubmission
+  const editLockReason = isCancelled
+    ? '作业已取消，不能再修改。'
+    : isPastDue
+      ? '作业已截止，不能再修改。'
+      : hasAnySubmission
+        ? '已有学生提交，不能再修改作业。'
+        : null
 
   return (
     <div className="course-assignment-detail-body">
@@ -232,13 +245,16 @@ export function TeacherAssignmentDetailRoute() {
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={updateMutation.isPending}
+                  disabled={!canEditAssignment || updateMutation.isPending}
                 >
                   {updateMutation.isPending ? '保存中...' : '保存修改'}
                 </button>
                 <button className="ghost-button" type="button" onClick={() => setDraft(null)}>
                   取消修改
                 </button>
+                {editLockReason ? (
+                  <small className="muted-paragraph">{editLockReason}</small>
+                ) : null}
               </div>
             </form>
           ) : (
@@ -247,6 +263,7 @@ export function TeacherAssignmentDetailRoute() {
                 <button
                   className="ghost-button"
                   type="button"
+                  disabled={!canEditAssignment}
                   onClick={() =>
                     setDraft({
                       title: assignment.title,
@@ -259,6 +276,9 @@ export function TeacherAssignmentDetailRoute() {
                 >
                   修改作业
                 </button>
+                {editLockReason ? (
+                  <small className="muted-paragraph">{editLockReason}</small>
+                ) : null}
               </div>
               <label htmlFor="cancel-reason">
                 取消原因

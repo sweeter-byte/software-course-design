@@ -41,7 +41,38 @@ export function StudentAssignmentWorkspace({
 
   const submission = assignment.mySubmission ?? null
   const isGraded = submission?.status === 'graded'
-  const canEditSubmission = !isGraded
+  const isCancelled = assignment.status === 'cancelled'
+  const dueAtMs = Date.parse(assignment.dueAt)
+  const isPastDue = Number.isFinite(dueAtMs) ? dueAtMs <= Date.now() : false
+  // §2.4: students may modify the answer only before the deadline AND before
+  // it has been graded. Cancelled assignments cannot be edited either.
+  const canEditSubmission = !isGraded && !isCancelled && !isPastDue
+
+  const lockReason = isCancelled
+    ? '该作业已取消，不能再提交或修改。'
+    : isGraded
+      ? '提交已批改，不能再修改。'
+      : isPastDue
+        ? '作业已截止，不能再提交或修改。'
+        : null
+
+  const submitButtonLabel = submission
+    ? isGraded
+      ? '已批改不可修改'
+      : isCancelled
+        ? '作业已取消'
+        : isPastDue
+          ? '已截止不可修改'
+          : isUpdating
+            ? '修改中...'
+            : '修改答案'
+    : isCancelled
+      ? '作业已取消'
+      : isPastDue
+        ? '已截止不可提交'
+        : isSubmitting
+          ? '提交中...'
+          : '提交答案'
 
   return (
     <div className="student-assignment-workspace">
@@ -102,17 +133,10 @@ export function StudentAssignmentWorkspace({
             readOnly={!canEditSubmission}
           />
         </label>
+        {lockReason ? <p className="muted-paragraph">{lockReason}</p> : null}
         <div className="inline-row">
           <button className="primary-button" type="submit" disabled={!canEditSubmission || isSubmitting || isUpdating}>
-            {submission
-              ? isGraded
-                ? '已批改不可修改'
-                : isUpdating
-                  ? '修改中...'
-                  : '修改答案'
-              : isSubmitting
-                ? '提交中...'
-                : '提交答案'}
+            {submitButtonLabel}
           </button>
         </div>
       </form>
