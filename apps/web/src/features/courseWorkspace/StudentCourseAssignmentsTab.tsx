@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 
@@ -5,15 +6,9 @@ import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { AssignmentItem } from '../../domain'
+import { assignmentStatusLabel } from '../../utils/assignment-status'
 import { formatDateTimeForDisplay } from '../../utils/date'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
-
-const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
-  not_started: '未开始',
-  in_progress: '进行中',
-  closed: '已截止',
-  cancelled: '已取消',
-}
 
 const SUBMISSION_STATUS_LABELS: Record<string, string> = {
   draft: '未提交',
@@ -37,6 +32,8 @@ export function StudentCourseAssignmentsTab() {
 
   const assignments = assignmentsQuery.data?.items ?? []
   const selectedAssignmentId = params.assignmentId ?? null
+  // Snapshot wall-clock once per mount so derivation stays pure during render.
+  const [nowMs] = useState(() => Date.now())
 
   return (
     <div className="course-tab-content course-assignments-layout">
@@ -64,9 +61,7 @@ export function StudentCourseAssignmentsTab() {
                 >
                   <div>
                     <strong>{assignment.title}</strong>
-                    <span>
-                      {ASSIGNMENT_STATUS_LABELS[assignment.status] ?? assignment.status}
-                    </span>
+                    <span>{assignmentStatusLabel(assignment, nowMs)}</span>
                   </div>
                   <p>{assignment.description}</p>
                   <small>截止：{formatDateTimeForDisplay(assignment.dueAt)}</small>

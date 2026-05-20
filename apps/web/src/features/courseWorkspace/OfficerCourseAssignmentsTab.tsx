@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 
@@ -6,19 +6,15 @@ import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { AssignmentItem, SubmissionItem } from '../../domain'
+import { assignmentStatusLabel } from '../../utils/assignment-status'
 import { formatDateTimeForDisplay } from '../../utils/date'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
-
-const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
-  not_started: '未开始',
-  in_progress: '进行中',
-  closed: '已截止',
-  cancelled: '已取消',
-}
 
 export function OfficerCourseAssignmentsTab() {
   const { course } = useOutletContext<CourseWorkspaceOutletContext>()
   const { apiBaseUrl, session } = useAuth()
+  // Snapshot wall-clock once per mount so derivation stays pure during render.
+  const [nowMs] = useState(() => Date.now())
 
   const assignmentsQuery = useQuery<{ items: AssignmentItem[] }>({
     queryKey: ['assignments', apiBaseUrl, session.accessToken, course.id],
@@ -88,7 +84,7 @@ export function OfficerCourseAssignmentsTab() {
             {rows.map(({ assignment, total, graded, pending }) => (
               <tr key={assignment.id}>
                 <td>{assignment.title}</td>
-                <td>{ASSIGNMENT_STATUS_LABELS[assignment.status] ?? assignment.status}</td>
+                <td>{assignmentStatusLabel(assignment, nowMs)}</td>
                 <td>{formatDateTimeForDisplay(assignment.startAt)}</td>
                 <td>{formatDateTimeForDisplay(assignment.dueAt)}</td>
                 <td>{total}</td>

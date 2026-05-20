@@ -6,14 +6,8 @@ import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { AssignmentItem, CourseItem } from '../../domain'
+import { assignmentStatusLabel } from '../../utils/assignment-status'
 import { formatDateTimeForDisplay } from '../../utils/date'
-
-const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
-  not_started: '未开始',
-  in_progress: '进行中',
-  closed: '已截止',
-  cancelled: '已取消',
-}
 
 const SUBMISSION_STATUS_LABELS: Record<string, string> = {
   draft: '未提交',
@@ -25,6 +19,8 @@ export function StudentAssignmentsRoute() {
   const { apiBaseUrl, session } = useAuth()
   const navigate = useNavigate()
   const [submissionFilter, setSubmissionFilter] = useState<string>('')
+  // Snapshot wall-clock once per mount so derivation stays pure during render.
+  const [nowMs] = useState(() => Date.now())
 
   const coursesQuery = useQuery<{ items: CourseItem[] }>({
     queryKey: ['courses', apiBaseUrl, session.accessToken, 'student-enrolled'],
@@ -122,7 +118,7 @@ export function StudentAssignmentsRoute() {
               >
                 <div>
                   <strong>{assignment.title}</strong>
-                  <span>{ASSIGNMENT_STATUS_LABELS[assignment.status] ?? assignment.status}</span>
+                  <span>{assignmentStatusLabel(assignment, nowMs)}</span>
                 </div>
                 <p>{assignment.description}</p>
                 <small>课程：{courseName}</small>

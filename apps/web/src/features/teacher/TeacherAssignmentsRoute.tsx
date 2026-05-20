@@ -7,15 +7,13 @@ import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import { createDefaultAssignmentDates } from '../../demo-defaults'
 import type { AssignmentItem, CourseItem } from '../../domain'
+import {
+  ASSIGNMENT_STATUS_FILTER_OPTIONS,
+  assignmentStatusLabel,
+  deriveAssignmentStatus,
+} from '../../utils/assignment-status'
 import { fromDateTimeLocalValue, toDateTimeLocalValue, formatDateTimeForDisplay } from '../../utils/date'
 import { extractErrorMessage } from '../../utils/errors'
-
-const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
-  not_started: '未开始',
-  in_progress: '进行中',
-  closed: '已截止',
-  cancelled: '已取消',
-}
 
 interface DraftState {
   courseId: string
@@ -83,13 +81,17 @@ export function TeacherAssignmentsRoute() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [draft, setDraft] = useState<DraftState>(() => makeBlankDraft())
   const [error, setError] = useState<string | null>(null)
+  // Snapshot wall-clock once per mount so derivation stays pure during render.
+  const [nowMs] = useState(() => Date.now())
 
   const filteredAssignments = useMemo(() => {
     return [...allAssignments]
       .filter((assignment) => (courseFilter ? assignment.courseId === courseFilter : true))
-      .filter((assignment) => (statusFilter ? assignment.status === statusFilter : true))
+      .filter((assignment) =>
+        statusFilter ? deriveAssignmentStatus(assignment, nowMs) === statusFilter : true,
+      )
       .sort((a, b) => (a.dueAt < b.dueAt ? 1 : -1))
-  }, [allAssignments, courseFilter, statusFilter])
+  }, [allAssignments, courseFilter, statusFilter, nowMs])
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -162,7 +164,7 @@ export function TeacherAssignmentsRoute() {
               onChange={(event) => setStatusFilter(event.target.value)}
             >
               <option value="">全部状态</option>
-              {Object.entries(ASSIGNMENT_STATUS_LABELS).map(([value, label]) => (
+              {ASSIGNMENT_STATUS_FILTER_OPTIONS.map(({ value, label }) => (
                 <option key={value} value={value}>
                   {label}
                 </option>
@@ -185,7 +187,7 @@ export function TeacherAssignmentsRoute() {
               >
                 <div>
                   <strong>{assignment.title}</strong>
-                  <span>{ASSIGNMENT_STATUS_LABELS[assignment.status] ?? assignment.status}</span>
+                  <span>{assignmentStatusLabel(assignment, nowMs)}</span>
                 </div>
                 <p>{assignment.description}</p>
                 <small>课程：{assignment.courseName}</small>

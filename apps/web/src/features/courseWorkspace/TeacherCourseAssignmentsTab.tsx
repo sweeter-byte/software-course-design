@@ -7,16 +7,10 @@ import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import { createDefaultAssignmentDates } from '../../demo-defaults'
 import type { AssignmentItem } from '../../domain'
+import { assignmentStatusLabel } from '../../utils/assignment-status'
 import { fromDateTimeLocalValue, toDateTimeLocalValue, formatDateTimeForDisplay } from '../../utils/date'
 import { extractErrorMessage } from '../../utils/errors'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
-
-const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
-  not_started: '未开始',
-  in_progress: '进行中',
-  closed: '已截止',
-  cancelled: '已取消',
-}
 
 interface DraftState {
   title: string
@@ -44,6 +38,8 @@ export function TeacherCourseAssignmentsTab() {
 
   const [draft, setDraft] = useState<DraftState>(() => makeBlankDraft())
   const [error, setError] = useState<string | null>(null)
+  // Snapshot wall-clock once per mount so derivation stays pure during render.
+  const [nowMs] = useState(() => Date.now())
 
   const assignmentsQuery = useQuery<{ items: AssignmentItem[] }>({
     queryKey: ['assignments', apiBaseUrl, session.accessToken, course.id],
@@ -96,7 +92,7 @@ export function TeacherCourseAssignmentsTab() {
               >
                 <div>
                   <strong>{assignment.title}</strong>
-                  <span>{ASSIGNMENT_STATUS_LABELS[assignment.status] ?? assignment.status}</span>
+                  <span>{assignmentStatusLabel(assignment, nowMs)}</span>
                 </div>
                 <p>{assignment.description}</p>
                 <small>截止：{formatDateTimeForDisplay(assignment.dueAt)}</small>

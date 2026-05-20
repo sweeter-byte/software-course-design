@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { StatePanel } from '../../components/ui/StatePanel'
 import type { AssignmentItem, FeedbackItem } from '../../domain'
+import { assignmentStatusLabel } from '../../utils/assignment-status'
 import { formatDateTimeForDisplay } from '../../utils/date'
 
 type StudentAssignmentWorkspaceProps = {
@@ -99,7 +100,7 @@ export function StudentAssignmentWorkspace({
           </div>
           <div>
             <dt>当前状态</dt>
-            <dd>{assignment.status}</dd>
+            <dd>{assignmentStatusLabel(assignment, nowMs)}</dd>
           </div>
         </dl>
       </div>
