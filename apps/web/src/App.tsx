@@ -34,6 +34,14 @@ import { TeacherCourseOverviewTab } from './features/courseWorkspace/TeacherCour
 import { TeacherCourseSubmissionsTab } from './features/courseWorkspace/TeacherCourseSubmissionsTab'
 import { TeacherFeedbackThreadRoute } from './features/courseWorkspace/TeacherFeedbackThreadRoute'
 import { TeacherSubmissionDetailRoute } from './features/courseWorkspace/TeacherSubmissionDetailRoute'
+import { OfficerCourseAssignmentsTab } from './features/courseWorkspace/OfficerCourseAssignmentsTab'
+import { OfficerCourseBasicInfoTab } from './features/courseWorkspace/OfficerCourseBasicInfoTab'
+import { OfficerCourseOverviewTab } from './features/courseWorkspace/OfficerCourseOverviewTab'
+import { TeacherCourseFeedbacksReadonlyTab as OfficerCourseFeedbacksTab } from './features/courseWorkspace/TeacherCourseFeedbacksReadonlyTab'
+import { OfficerCourseListRoute } from './features/officer/OfficerCourseListRoute'
+import { OfficerGlobalCourseFeedbacksRoute } from './features/officer/OfficerGlobalCourseFeedbacksRoute'
+import { OfficerUsersRoute } from './features/officer/OfficerUsersRoute'
+import { OfficerUsersTab } from './features/officer/OfficerUsersTab'
 import { TeacherAssignmentsRoute } from './features/teacher/TeacherAssignmentsRoute'
 import { TeacherTasksRoute } from './features/teacher/TeacherTasksRoute'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
@@ -117,15 +125,14 @@ interface NavItem {
  * through <RoutePlaceholder/> in step 1 and replaced with a real component in
  * later migration steps.
  */
-const PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
-  '/officer/courses/:courseId/overview',
-  '/officer/courses/:courseId/basic-info',
-  '/officer/courses/:courseId/assignments',
-  '/officer/courses/:courseId/course-feedbacks',
-  '/officer/users/students',
-  '/officer/users/teachers',
-  '/officer/users/officers',
-]
+const PLACEHOLDER_ROUTES: ReadonlyArray<string> = []
+
+const OFFICER_COURSE_WORKSPACE_TABS = [
+  { to: 'overview', label: '课程概览' },
+  { to: 'basic-info', label: '基础信息维护' },
+  { to: 'assignments', label: '作业概况' },
+  { to: 'course-feedbacks', label: '课程反馈查看' },
+] as const
 
 const STUDENT_COURSE_WORKSPACE_TABS = [
   { to: 'overview', label: '课程概览' },
@@ -1234,6 +1241,67 @@ function App() {
           <Route path="/teacher/assignments" element={<TeacherAssignmentsRoute />} />
           <Route path="/teacher/tasks" element={<TeacherTasksRoute />} />
 
+          {/* Officer course list with create form (§4.3). */}
+          <Route path="/officer/courses" element={<OfficerCourseListRoute />} />
+
+          {/* Officer course workspace (§4.3). Four tabs covering overview,
+              basic-info maintenance with cascade-delete preview, read-only
+              assignment stats, and read-only course feedback view. */}
+          <Route
+            path="/officer/courses/:courseId"
+            element={<CourseWorkspace role="officer" tabs={OFFICER_COURSE_WORKSPACE_TABS} />}
+          >
+            <Route path="overview" element={<OfficerCourseOverviewTab />} />
+            <Route path="basic-info" element={<OfficerCourseBasicInfoTab />} />
+            <Route path="assignments" element={<OfficerCourseAssignmentsTab />} />
+            <Route path="course-feedbacks" element={<OfficerCourseFeedbacksTab />} />
+          </Route>
+
+          {/* Officer user management (§4.4). /officer/users redirects to the
+              students sub-tab; teachers tab carries no create button. */}
+          <Route path="/officer/users" element={<OfficerUsersRoute />}>
+            <Route index element={<Navigate to="students" replace />} />
+            <Route
+              path="students"
+              element={
+                <OfficerUsersTab
+                  role="student"
+                  showStatusToggle
+                  identityFieldLabel="学号"
+                  description="学生账号由学生自助注册。"
+                />
+              }
+            />
+            <Route
+              path="teachers"
+              element={
+                <OfficerUsersTab
+                  role="teacher"
+                  showStatusToggle
+                  identityFieldLabel="工号"
+                  description="教师账号由系统管理员在初始化阶段通过 seed 预置，不在此处创建。"
+                />
+              }
+            />
+            <Route
+              path="officers"
+              element={
+                <OfficerUsersTab
+                  role="officer"
+                  showStatusToggle={false}
+                  identityFieldLabel="账号"
+                  description="教务员账号由系统管理员通过 seed 预置，仅做只读查看。"
+                />
+              }
+            />
+          </Route>
+
+          {/* Officer global course-feedbacks viewer (§4.5). */}
+          <Route
+            path="/officer/course-feedbacks"
+            element={<OfficerGlobalCourseFeedbacksRoute />}
+          />
+
           {/* Teacher course workspace (§3.3). Five tabs covering assignment
               management, grading, feedback answering, and read-only course
               feedback. */}
@@ -1433,6 +1501,10 @@ function App() {
                           }
                           if (currentRole === 'teacher') {
                             navigate(`/teacher/courses/${course.id}`)
+                            return
+                          }
+                          if (currentRole === 'officer') {
+                            navigate(`/officer/courses/${course.id}`)
                             return
                           }
                           startTransition(() => {
