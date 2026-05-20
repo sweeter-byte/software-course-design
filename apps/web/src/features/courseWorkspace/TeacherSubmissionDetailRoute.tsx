@@ -5,6 +5,7 @@ import { useOutletContext, useParams } from 'react-router-dom'
 import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
+import { useNotify } from '../../contexts/useNotify'
 import type { SubmissionItem } from '../../domain'
 import { formatDateTimeForDisplay } from '../../utils/date'
 import { extractErrorMessage } from '../../utils/errors'
@@ -15,6 +16,7 @@ export function TeacherSubmissionDetailRoute() {
   const { course } = useOutletContext<CourseWorkspaceOutletContext>()
   const { submissionId } = useParams<{ submissionId: string }>()
   const { apiBaseUrl, session } = useAuth()
+  const notify = useNotify()
   const queryClient = useQueryClient()
 
   const submissionQuery = useQuery<{ submission: SubmissionItem }>({
@@ -42,6 +44,8 @@ export function TeacherSubmissionDetailRoute() {
     setTeacherFeedback(submission?.teacherFeedback ?? '')
   }
 
+  const wasGraded = submission?.status === 'graded'
+
   const gradeMutation = useMutation({
     mutationFn: async () => {
       if (!submissionId) return null
@@ -55,6 +59,10 @@ export function TeacherSubmissionDetailRoute() {
     },
     onSuccess: () => {
       setError(null)
+      notify({
+        type: 'success',
+        content: wasGraded ? '批改已更新，分数与评语已保存。' : '批改已提交，分数与评语已保存。',
+      })
       queryClient.invalidateQueries({ queryKey: ['submissions'] })
       queryClient.invalidateQueries({ queryKey: ['submission-detail'] })
       queryClient.invalidateQueries({ queryKey: ['feedbackThreads'] })
@@ -70,7 +78,7 @@ export function TeacherSubmissionDetailRoute() {
     return <StatePanel title="未找到提交" detail="该提交可能不在当前课程范围内。" />
   }
 
-  const alreadyGraded = submission.status === 'graded'
+  const alreadyGraded = wasGraded
 
   return (
     <div className="course-submission-detail-body">
