@@ -5,6 +5,7 @@ import { useOutletContext, useParams } from 'react-router-dom'
 import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
+import { useNotify } from '../../contexts/useNotify'
 import type { AssignmentItem, CourseItem, FeedbackItem } from '../../domain'
 import { extractErrorMessage } from '../../utils/errors'
 import { StudentAssignmentWorkspace } from '../assignments/StudentAssignmentWorkspace'
@@ -17,6 +18,7 @@ export function StudentAssignmentDetailRoute() {
   const { course } = useOutletContext<AssignmentsTabOutletContext>()
   const { assignmentId } = useParams<{ assignmentId: string }>()
   const { apiBaseUrl, session } = useAuth()
+  const notify = useNotify()
   const queryClient = useQueryClient()
 
   const [submissionContent, setSubmissionContent] = useState('')
@@ -68,6 +70,7 @@ export function StudentAssignmentDetailRoute() {
     },
     onSuccess: () => {
       setError(null)
+      notify({ type: 'success', content: '提交成功，答案已保存。' })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
     },
     onError: (error) => setError(extractErrorMessage(error)),
@@ -80,6 +83,7 @@ export function StudentAssignmentDetailRoute() {
     },
     onSuccess: () => {
       setError(null)
+      notify({ type: 'success', content: '修改成功，答案已更新。' })
       queryClient.invalidateQueries({ queryKey: ['assignments'] })
     },
     onError: (error) => setError(extractErrorMessage(error)),
@@ -99,6 +103,7 @@ export function StudentAssignmentDetailRoute() {
     onSuccess: () => {
       setError(null)
       setFeedbackDraft({ kind: 'question', content: '' })
+      notify({ type: 'success', content: '已发布，可在下方查看。' })
       queryClient.invalidateQueries({ queryKey: ['feedbacks'] })
     },
     onError: (error) => setError(extractErrorMessage(error)),

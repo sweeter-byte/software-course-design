@@ -6,6 +6,7 @@ import './App.css'
 import { api, type SessionPayload } from './api'
 import { RoleShell } from './components/layout/RoleShell'
 import { AuthProvider } from './contexts/AuthContext'
+import { NotificationsProvider } from './contexts/NotificationsContext'
 import { AccountRoute } from './features/account/AccountRoute'
 import { StudentAssignmentsRoute } from './features/assignments/StudentAssignmentsRoute'
 import { LoginShell, type AuthMode } from './features/auth/LoginShell'
@@ -169,7 +170,8 @@ function App() {
   const [session, setSession] = useState<SessionPayload | null>(initialRuntimeState.session)
   const authMode: AuthMode = pathToAuthMode(location.pathname)
   const setAuthMode = (mode: AuthMode) => navigate(authModeToPath(mode), { replace: true })
-  const { notifications, notify, dismiss: dismissNotification } = useNotifications()
+  const notificationsApi = useNotifications()
+  const { notifications, notify, dismiss: dismissNotification } = notificationsApi
 
   useEffect(() => {
     const id = notify({
@@ -358,6 +360,7 @@ function App() {
 
   return (
     <AuthProvider apiBaseUrl={apiBaseUrl} session={session}>
+      <NotificationsProvider value={notificationsApi}>
       <RoleShell
         user={session.user}
         roleLabel={ROLE_LABELS[role]}
@@ -474,6 +477,7 @@ function App() {
           <Route path="*" element={<Navigate to={dashboardPath(role)} replace />} />
         </Routes>
       </RoleShell>
+      </NotificationsProvider>
     </AuthProvider>
   )
 }
