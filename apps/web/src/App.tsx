@@ -26,6 +26,14 @@ import { StudentCourseFeedbacksOverallTab } from './features/courseWorkspace/Stu
 import { StudentCourseFeedbacksTab } from './features/courseWorkspace/StudentCourseFeedbacksTab'
 import { StudentCourseOverviewTab } from './features/courseWorkspace/StudentCourseOverviewTab'
 import { StudentFeedbackThreadRoute } from './features/courseWorkspace/StudentFeedbackThreadRoute'
+import { TeacherAssignmentDetailRoute } from './features/courseWorkspace/TeacherAssignmentDetailRoute'
+import { TeacherCourseAssignmentsTab } from './features/courseWorkspace/TeacherCourseAssignmentsTab'
+import { TeacherCourseFeedbacksReadonlyTab } from './features/courseWorkspace/TeacherCourseFeedbacksReadonlyTab'
+import { TeacherCourseFeedbacksTab } from './features/courseWorkspace/TeacherCourseFeedbacksTab'
+import { TeacherCourseOverviewTab } from './features/courseWorkspace/TeacherCourseOverviewTab'
+import { TeacherCourseSubmissionsTab } from './features/courseWorkspace/TeacherCourseSubmissionsTab'
+import { TeacherFeedbackThreadRoute } from './features/courseWorkspace/TeacherFeedbackThreadRoute'
+import { TeacherSubmissionDetailRoute } from './features/courseWorkspace/TeacherSubmissionDetailRoute'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
@@ -108,14 +116,6 @@ interface NavItem {
  * later migration steps.
  */
 const PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
-  '/teacher/courses/:courseId/overview',
-  '/teacher/courses/:courseId/assignments',
-  '/teacher/courses/:courseId/assignments/:assignmentId',
-  '/teacher/courses/:courseId/submissions',
-  '/teacher/courses/:courseId/submissions/:submissionId',
-  '/teacher/courses/:courseId/feedbacks',
-  '/teacher/courses/:courseId/feedbacks/:feedbackId',
-  '/teacher/courses/:courseId/course-feedbacks',
   '/teacher/tasks',
   '/officer/courses/:courseId/overview',
   '/officer/courses/:courseId/basic-info',
@@ -129,6 +129,14 @@ const PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
 const STUDENT_COURSE_WORKSPACE_TABS = [
   { to: 'overview', label: '课程概览' },
   { to: 'assignments', label: '作业' },
+  { to: 'feedbacks', label: '作业反馈' },
+  { to: 'course-feedbacks', label: '课程整体反馈' },
+] as const
+
+const TEACHER_COURSE_WORKSPACE_TABS = [
+  { to: 'overview', label: '课程概览' },
+  { to: 'assignments', label: '作业' },
+  { to: 'submissions', label: '提交批改' },
   { to: 'feedbacks', label: '作业反馈' },
   { to: 'course-feedbacks', label: '课程整体反馈' },
 ] as const
@@ -343,10 +351,10 @@ function App() {
   const showUserAdmin = currentRole === 'officer' && visibleView === 'userAdmin'
   const showCoursesList = visibleView === 'dashboard' || visibleView === 'courses'
   const showCourseAdmin = currentRole === 'officer' && visibleView === 'courseAdmin'
-  const showCourseParticipation =
-    currentRole === 'student'
-      ? visibleView === 'courses'
-      : currentRole === 'teacher' && visibleView === 'assignments'
+  // Step 5: teachers no longer see the inline assignment form on the legacy
+  // /teacher/assignments page; assignment management now lives in the course
+  // workspace 作业 tab.
+  const showCourseParticipation = currentRole === 'student' && visibleView === 'courses'
   const showCourseFeedbacks = visibleView === 'courseFeedbacks'
   const showAssignmentsList = visibleView === 'assignments'
   const showAssignmentDetail =
@@ -1213,6 +1221,29 @@ function App() {
             <Route path="course-feedbacks" element={<StudentCourseFeedbacksOverallTab />} />
           </Route>
 
+          {/* Teacher course workspace (§3.3). Five tabs covering assignment
+              management, grading, feedback answering, and read-only course
+              feedback. */}
+          <Route
+            path="/teacher/courses/:courseId"
+            element={<CourseWorkspace role="teacher" tabs={TEACHER_COURSE_WORKSPACE_TABS} />}
+          >
+            <Route path="overview" element={<TeacherCourseOverviewTab />} />
+            <Route path="assignments" element={<TeacherCourseAssignmentsTab />}>
+              <Route path=":assignmentId" element={<TeacherAssignmentDetailRoute />} />
+            </Route>
+            <Route path="submissions" element={<TeacherCourseSubmissionsTab />}>
+              <Route path=":submissionId" element={<TeacherSubmissionDetailRoute />} />
+            </Route>
+            <Route path="feedbacks" element={<TeacherCourseFeedbacksTab />}>
+              <Route path=":feedbackId" element={<TeacherFeedbackThreadRoute />} />
+            </Route>
+            <Route
+              path="course-feedbacks"
+              element={<TeacherCourseFeedbacksReadonlyTab />}
+            />
+          </Route>
+
           {PLACEHOLDER_ROUTES.map((path) => (
             <Route key={path} path={path} element={<RoutePlaceholder route={path} />} />
           ))}
@@ -1385,6 +1416,10 @@ function App() {
                         onClick={() => {
                           if (currentRole === 'student' && course.enrolled) {
                             navigate(`/student/courses/${course.id}`)
+                            return
+                          }
+                          if (currentRole === 'teacher') {
+                            navigate(`/teacher/courses/${course.id}`)
                             return
                           }
                           startTransition(() => {
