@@ -4,9 +4,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 
 import './App.css'
 import { ApiError, api, type SessionPayload } from './api'
-import { SidebarDrawer } from './components/layout/SidebarDrawer'
-import { WorkspaceContextBar } from './components/layout/WorkspaceContextBar'
-import { NotificationStack } from './components/notifications/NotificationStack'
+import { RoleShell } from './components/layout/RoleShell'
 import { StatePanel } from './components/ui/StatePanel'
 import { createDefaultAssignmentDates } from './demo-defaults'
 import type {
@@ -21,7 +19,6 @@ import type {
 import { LoginShell, type AuthMode } from './features/auth/LoginShell'
 import { StudentAssignmentWorkspace } from './features/assignments/StudentAssignmentWorkspace'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
-import { useMediaQuery } from './hooks/useMediaQuery'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
 import { RoutePlaceholder } from './routes/RoutePlaceholder'
@@ -326,9 +323,6 @@ function App() {
   })
   const [userAdminRoleFilter, setUserAdminRoleFilter] = useState<'' | UserRole>('')
   const [userAdminPendingId, setUserAdminPendingId] = useState<string | null>(null)
-  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
-  const isCompactViewport = useMediaQuery('(max-width: 840px)')
-  const isDrawerOpen = isCompactViewport && isMobileNavOpen
   const currentRole = session?.user.role
   const navItems = currentRole ? roleNavigation[currentRole] : []
   const legacyView = deriveLegacyView(location.pathname, currentRole)
@@ -1155,142 +1149,39 @@ function App() {
     )
   }
 
-  const sidebarBody = (
-    <>
-      <div className="sidebar-brand">
-        <div className="brand-crest">
-          <span>航</span>
-        </div>
-        <div>
-          <h1>课程互动管理系统</h1>
-          <p>{roleLabels[session.user.role]}端</p>
-        </div>
-      </div>
-
-      <nav className="sidebar-nav" aria-label="Web 端功能导航">
-        {navItems.map((item) => {
-          const isActive =
-            location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
-          return (
-            <button
-              key={item.to}
-              className={isActive ? 'nav-item active' : 'nav-item'}
-              type="button"
-              onClick={() => {
-                navigate(item.to)
-                if (isCompactViewport) {
-                  setIsMobileNavOpen(false)
-                }
-              }}
-            >
-              <span className="nav-icon" aria-hidden="true">
-                {item.label.slice(0, 1)}
-              </span>
-              <span>
-                <strong>{item.label}</strong>
-                <small>{item.hint}</small>
-              </span>
-            </button>
-          )
-        })}
-      </nav>
-
-      <div className="sidebar-footer">
-        <span className="service-dot" />
-        <p>平台运行正常</p>
-      </div>
-      <div className="sidebar-guide">
-        <strong>使用指引</strong>
-        <p>{workspaceTips[0]}</p>
-      </div>
-    </>
-  )
-
   return (
-    <div className={`page-shell${isCompactViewport ? ' page-shell-compact' : ''}`}>
-      {isCompactViewport ? (
-        <SidebarDrawer
-          isOpen={isDrawerOpen}
-          onClose={() => setIsMobileNavOpen(false)}
-          ariaLabel="功能导航"
-        >
-          {sidebarBody}
-        </SidebarDrawer>
-      ) : (
-        <aside className="brand-rail app-sidebar">{sidebarBody}</aside>
-      )}
-
-      <main className="workspace">
-        <header className="workspace-head">
-          {isCompactViewport ? (
-            <button
-              type="button"
-              className="hamburger-button"
-              aria-label="打开功能导航"
-              aria-expanded={isDrawerOpen}
-              aria-controls="sidebar-drawer"
-              onClick={() => setIsMobileNavOpen(true)}
-            >
-              <span className="hamburger-bars" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </span>
-            </button>
-          ) : null}
-          <div className="workspace-title-block">
-            <p className="eyebrow">课程互动管理系统</p>
-            <h2>{activePageTitle}</h2>
-            <p className="workspace-subcopy">
-              {roleDescription}
-            </p>
-          </div>
-
-          <div className="api-field">
-            <span>{session.user.realName}</span>
-            <strong>{roleLabels[session.user.role]}</strong>
-            <div className="service-pill">
-              <span className="service-dot" />
-              在线
-            </div>
-          </div>
-
-          {session ? (
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => logoutMutation.mutate()}
-              disabled={logoutMutation.isPending}
-            >
-              {logoutMutation.isPending ? '退出中...' : '退出会话'}
-            </button>
-          ) : null}
-        </header>
-
-        <NotificationStack notifications={notifications} onDismiss={dismissNotification} />
-        <WorkspaceContextBar
-          context={workspaceContext}
-          courses={visibleCourses}
-          assignments={assignments}
-          submissions={submissions}
-          onCourseChange={(courseId) => {
-            startTransition(() => {
-              setSelectedCourseId(courseId || null)
-              resetBelowCourse()
-              setSubmissionContent('')
-            })
-          }}
-          onAssignmentChange={(assignmentId) => {
-            startTransition(() => {
-              const assignment = assignments.find((item) => item.id === assignmentId) ?? null
-              setSelectedAssignmentId(assignment?.id ?? null)
-              setSelectedSubmissionId(assignment?.mySubmission?.id ?? assignment?.submissionId ?? null)
-              setSubmissionContent(assignment?.mySubmission?.content ?? '')
-            })
-          }}
-          onSubmissionChange={(submissionId) => setSelectedSubmissionId(submissionId || null)}
-        />
-
+    <RoleShell
+      user={session.user}
+      roleLabel={roleLabels[session.user.role]}
+      pageTitle={activePageTitle}
+      roleDescription={roleDescription}
+      navItems={navItems}
+      guideTip={workspaceTips[0]}
+      notifications={notifications}
+      onDismissNotification={dismissNotification}
+      workspaceContext={workspaceContext}
+      courses={visibleCourses}
+      assignments={assignments}
+      submissions={submissions}
+      onCourseChange={(courseId) => {
+        startTransition(() => {
+          setSelectedCourseId(courseId || null)
+          resetBelowCourse()
+          setSubmissionContent('')
+        })
+      }}
+      onAssignmentChange={(assignmentId) => {
+        startTransition(() => {
+          const assignment = assignments.find((item) => item.id === assignmentId) ?? null
+          setSelectedAssignmentId(assignment?.id ?? null)
+          setSelectedSubmissionId(assignment?.mySubmission?.id ?? assignment?.submissionId ?? null)
+          setSubmissionContent(assignment?.mySubmission?.content ?? '')
+        })
+      }}
+      onSubmissionChange={(submissionId) => setSelectedSubmissionId(submissionId || null)}
+      onLogout={() => logoutMutation.mutate()}
+      isLoggingOut={logoutMutation.isPending}
+    >
         <Routes>
           {/* Course workspace roots redirect to their overview tab (§1.1). */}
           <Route path="/student/courses/:courseId" element={<Navigate to="overview" replace />} />
@@ -2319,8 +2210,7 @@ function App() {
             }
           />
         </Routes>
-      </main>
-    </div>
+    </RoleShell>
   )
 }
 

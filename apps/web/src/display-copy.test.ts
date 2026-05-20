@@ -6,6 +6,10 @@ import { describe, expect, it } from 'vitest'
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url))
 const appSource = readFileSync(path.resolve(currentDir, 'App.tsx'), 'utf8')
+const roleShellSource = readFileSync(
+  path.resolve(currentDir, 'components/layout/RoleShell.tsx'),
+  'utf8',
+)
 const boundarySource = readFileSync(path.resolve(currentDir, 'error-boundary.tsx'), 'utf8')
 const contextBarSource = readFileSync(
   path.resolve(currentDir, 'components/layout/WorkspaceContextBar.tsx'),
@@ -42,7 +46,7 @@ const accountSectionSource = readFileSync(
 
 describe('frontend display copy', () => {
   it('removes internal development wording from user-facing screens', () => {
-    const combinedSource = `${appSource}\n${boundarySource}\n${loginShellSource}\n${accountSectionSource}`
+    const combinedSource = `${appSource}\n${roleShellSource}\n${boundarySource}\n${loginShellSource}\n${accountSectionSource}`
     const bannedPhrases = [
       'API Base URL',
       '演示账号',
@@ -64,10 +68,10 @@ describe('frontend display copy', () => {
   })
 
   it('keeps the page copy product-facing', () => {
-    const productSource = `${appSource}\n${loginShellSource}\n${accountSectionSource}`
+    const productSource = `${appSource}\n${roleShellSource}\n${loginShellSource}\n${accountSectionSource}`
     expect(productSource).toContain('账号登录')
     expect(productSource).toContain('学生注册')
-    expect(appSource).toContain('使用指引')
+    expect(roleShellSource).toContain('使用指引')
     expect(appSource).toContain('课程列表')
     expect(appSource).toContain('当前进度')
   })
