@@ -39,7 +39,7 @@
 - `id`
 - `phone`
 - `purpose`
-- `code`
+- `code`：本地模式保存 6 位验证码；CloudBase 模式保存 `verification_id`
 - `expires_at`
 - `used_at`
 - `created_at`

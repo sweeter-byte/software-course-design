@@ -650,7 +650,9 @@ function App() {
       )
       notify({
         type: 'info',
-        content: `${target === 'old' ? '旧手机号' : '新手机号'}验证码已回填。`,
+        content: previewCode
+          ? `${target === 'old' ? '旧手机号' : '新手机号'}验证码已回填。`
+          : `${target === 'old' ? '旧手机号' : '新手机号'}验证码已发送。`,
       })
     },
     onError: (error) => notify({ type: 'error', content: extractErrorMessage(error) }),

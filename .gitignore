@@ -5,6 +5,8 @@ dist/
 .playwright-cli/
 .expo/
 .expo-shared/
+.env.local
+.env.*.local
 *.log
 logs/
 data/*.db

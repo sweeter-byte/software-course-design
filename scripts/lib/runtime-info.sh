@@ -64,3 +64,16 @@ wait_for_vite_url() {
 
   return 1
 }
+
+load_env_file() {
+  local env_file="$1"
+
+  if [[ ! -f "$env_file" ]]; then
+    return 1
+  fi
+
+  set -a
+  # shellcheck disable=SC1090
+  source "$env_file"
+  set +a
+}

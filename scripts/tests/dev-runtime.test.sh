@@ -65,3 +65,20 @@ if [[ "$actual" != "$expected" ]]; then
 fi
 
 printf 'dev runtime url parsing test passed\n'
+
+tmp_env="$(mktemp)"
+trap 'rm -f "$tmp_log" "$tmp_env"' EXIT
+
+cat >"$tmp_env" <<'EOF'
+COURSE_DEV_TEST_ENV_FILE_VALUE=loaded-from-env-local
+EOF
+
+unset COURSE_DEV_TEST_ENV_FILE_VALUE
+load_env_file "$tmp_env"
+
+if [[ "${COURSE_DEV_TEST_ENV_FILE_VALUE:-}" != "loaded-from-env-local" ]]; then
+  printf 'expected env file value to be loaded, got %s\n' "${COURSE_DEV_TEST_ENV_FILE_VALUE:-}"
+  exit 1
+fi
+
+printf 'dev runtime env loading test passed\n'

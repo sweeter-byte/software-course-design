@@ -60,6 +60,8 @@
 - 说明：申请验证码
 - 请求体：`phone`, `purpose`
 - `purpose`: `register | reset_password | change_phone`
+- 返回：`phone`, `purpose`, `expiresIn`；开发/测试本地模式额外返回 `previewCode`
+- CloudBase 模式：后端调用 CloudBase 发送与校验验证码，客户端仍只提交用户收到的 `verificationCode`
 
 ### POST `/auth/password/forgot`
 

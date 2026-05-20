@@ -23,14 +23,143 @@ interface AuthRouteContext {
   logger: LogWriter
 }
 
+type VerificationPurpose = 'register' | 'reset_password' | 'change_phone'
+
+interface VerificationRecord {
+  id: string
+  code: string
+  expires_at: string
+  used_at: string | null
+}
+
 function createVerificationCode() {
   return `${Math.floor(100000 + Math.random() * 900000)}`
+}
+
+function getCloudBaseApiBaseUrl(config: AppConfig) {
+  const baseUrl = config.cloudBaseApiBaseUrl?.replace(/\/$/, '')
+
+  if (!baseUrl) {
+    throw new AppError('cloudbase_config_missing', 500, 'CLOUDBASE_CONFIG_MISSING')
+  }
+
+  return baseUrl
+}
+
+function getCloudBaseApiToken(config: AppConfig) {
+  if (!config.cloudBaseApiToken) {
+    throw new AppError('cloudbase_config_missing', 500, 'CLOUDBASE_CONFIG_MISSING')
+  }
+
+  return config.cloudBaseApiToken
+}
+
+function formatCloudBasePhone(phone: string) {
+  const trimmed = phone.trim()
+
+  if (trimmed.startsWith('+')) {
+    return trimmed
+  }
+
+  return `+86 ${trimmed}`
+}
+
+function getCloudBaseErrorStatus(error: string, status: number) {
+  if (error === 'rate_limit_exceeded') return 429
+  if (status >= 400 && status < 500) return 400
+  return 502
+}
+
+function getCloudBaseErrorCode(error: string, isVerificationCheck = false) {
+  if (error === 'invalid_verification_code' || (isVerificationCheck && error === 'invalid_argument')) {
+    return 'VERIFICATION_CODE_INVALID'
+  }
+  if (error === 'verification_code_expired') return 'VERIFICATION_CODE_EXPIRED'
+  if (error === 'rate_limit_exceeded') return 'VERIFICATION_RATE_LIMITED'
+  if (error === 'captcha_required') return 'VERIFICATION_CAPTCHA_REQUIRED'
+
+  return 'CLOUDBASE_VERIFICATION_FAILED'
+}
+
+async function readCloudBaseJson(response: Response) {
+  return (await response.json().catch(() => ({}))) as Record<string, unknown>
+}
+
+function throwCloudBaseError(status: number, payload: Record<string, unknown>, isVerificationCheck = false) {
+  const error = typeof payload.error === 'string' ? payload.error : 'cloudbase_verification_failed'
+  const description = typeof payload.error_description === 'string' ? payload.error_description : undefined
+  const isInvalidVerificationCode =
+    error === 'invalid_verification_code' || (isVerificationCheck && error === 'invalid_argument')
+
+  throw new AppError(
+    isInvalidVerificationCode ? 'verification_code_invalid' : error,
+    getCloudBaseErrorStatus(error, status),
+    getCloudBaseErrorCode(error, isVerificationCheck),
+    description ? [{ path: ['verificationCode'], message: description }] : undefined,
+  )
+}
+
+async function sendCloudBaseVerificationCode(config: AppConfig, phone: string) {
+  const response = await fetch(`${getCloudBaseApiBaseUrl(config)}/auth/v1/verification`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${getCloudBaseApiToken(config)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      phone_number: formatCloudBasePhone(phone),
+      target: 'ANY',
+    }),
+  })
+
+  const payload = await readCloudBaseJson(response)
+
+  if (!response.ok) {
+    throwCloudBaseError(response.status, payload)
+  }
+
+  if (typeof payload.verification_id !== 'string') {
+    throw new AppError('cloudbase_response_invalid', 502, 'CLOUDBASE_RESPONSE_INVALID')
+  }
+
+  return {
+    verificationId: payload.verification_id,
+    expiresIn: typeof payload.expires_in === 'number' ? payload.expires_in : 600,
+  }
+}
+
+async function verifyCloudBaseVerificationCode(
+  config: AppConfig,
+  verificationId: string,
+  verificationCode: string,
+) {
+  const response = await fetch(`${getCloudBaseApiBaseUrl(config)}/auth/v1/verification/verify`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${getCloudBaseApiToken(config)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      verification_id: verificationId,
+      verification_code: verificationCode,
+    }),
+  })
+
+  const payload = await readCloudBaseJson(response)
+
+  if (!response.ok) {
+    throwCloudBaseError(response.status, payload, true)
+  }
+
+  if (typeof payload.verification_token !== 'string') {
+    throw new AppError('cloudbase_response_invalid', 502, 'CLOUDBASE_RESPONSE_INVALID')
+  }
 }
 
 function getLatestVerificationCode(
   database: DatabaseSync,
   phone: string,
-  purpose: 'register' | 'reset_password' | 'change_phone',
+  purpose: VerificationPurpose,
 ) {
   return database
     .prepare(
@@ -42,14 +171,36 @@ function getLatestVerificationCode(
         LIMIT 1
       `,
     )
-    .get(phone, purpose) as
-    | {
-        id: string
-        code: string
-        expires_at: string
-        used_at: string | null
-      }
-    | undefined
+    .get(phone, purpose) as VerificationRecord | undefined
+}
+
+async function assertVerificationCode(
+  context: AuthRouteContext,
+  verification: VerificationRecord | undefined,
+  verificationCode: string,
+): Promise<VerificationRecord> {
+  if (!verification) {
+    throw new AppError('verification_code_not_found', 400, 'VERIFICATION_CODE_NOT_FOUND')
+  }
+
+  if (verification.used_at) {
+    throw new AppError('verification_code_used', 400, 'VERIFICATION_CODE_USED')
+  }
+
+  if (new Date(verification.expires_at).getTime() < Date.now()) {
+    throw new AppError('verification_code_expired', 400, 'VERIFICATION_CODE_EXPIRED')
+  }
+
+  if (context.config.verificationProvider === 'cloudbase') {
+    await verifyCloudBaseVerificationCode(context.config, verification.code, verificationCode)
+    return verification
+  }
+
+  if (verification.code !== verificationCode) {
+    throw new AppError('verification_code_invalid', 400, 'VERIFICATION_CODE_INVALID')
+  }
+
+  return verification
 }
 
 async function createSessionTokens(reply: FastifyReply, context: AuthRouteContext, user: {
@@ -86,9 +237,15 @@ async function createSessionTokens(reply: FastifyReply, context: AuthRouteContex
 export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteContext) {
   app.post('/verification-code', async (request, reply) => {
     const payload = verificationCodeRequestSchema.parse(request.body)
-    const code = createVerificationCode()
     const now = new Date()
-    const expiresAt = new Date(now.getTime() + 5 * 60 * 1000)
+    const issued =
+      context.config.verificationProvider === 'cloudbase'
+        ? await sendCloudBaseVerificationCode(context.config, payload.phone)
+        : {
+            verificationId: createVerificationCode(),
+            expiresIn: 5 * 60,
+          }
+    const expiresAt = new Date(now.getTime() + issued.expiresIn * 1000)
 
     context.database
       .prepare(
@@ -97,7 +254,15 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `,
       )
-      .run(nanoid(), payload.phone, payload.purpose, code, expiresAt.toISOString(), null, now.toISOString())
+      .run(
+        nanoid(),
+        payload.phone,
+        payload.purpose,
+        issued.verificationId,
+        expiresAt.toISOString(),
+        null,
+        now.toISOString(),
+      )
 
     context.logger.info('verification_code_issued', {
       requestId: request.id,
@@ -111,7 +276,11 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
       {
         phone: payload.phone,
         purpose: payload.purpose,
-        previewCode: context.config.allowVerificationPreview ? code : undefined,
+        expiresIn: issued.expiresIn,
+        previewCode:
+          context.config.verificationProvider === 'local' && context.config.allowVerificationPreview
+            ? issued.verificationId
+            : undefined,
       },
       'verification_code_sent',
     )
@@ -119,23 +288,11 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
 
   app.post('/register/student', async (request, reply) => {
     const payload = studentRegisterSchema.parse(request.body)
-    const verification = getLatestVerificationCode(context.database, payload.phone, 'register')
-
-    if (!verification) {
-      throw new AppError('verification_code_not_found', 400, 'VERIFICATION_CODE_NOT_FOUND')
-    }
-
-    if (verification.used_at) {
-      throw new AppError('verification_code_used', 400, 'VERIFICATION_CODE_USED')
-    }
-
-    if (new Date(verification.expires_at).getTime() < Date.now()) {
-      throw new AppError('verification_code_expired', 400, 'VERIFICATION_CODE_EXPIRED')
-    }
-
-    if (verification.code !== payload.verificationCode) {
-      throw new AppError('verification_code_invalid', 400, 'VERIFICATION_CODE_INVALID')
-    }
+    const verification = await assertVerificationCode(
+      context,
+      getLatestVerificationCode(context.database, payload.phone, 'register'),
+      payload.verificationCode,
+    )
 
     const phoneExists = context.database
       .prepare('SELECT id FROM users WHERE phone = ? LIMIT 1')
@@ -305,23 +462,11 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
 
   app.post('/password/forgot', async (request) => {
     const payload = passwordForgotSchema.parse(request.body)
-    const verification = getLatestVerificationCode(context.database, payload.phone, 'reset_password')
-
-    if (!verification) {
-      throw new AppError('verification_code_not_found', 400, 'VERIFICATION_CODE_NOT_FOUND')
-    }
-
-    if (verification.used_at) {
-      throw new AppError('verification_code_used', 400, 'VERIFICATION_CODE_USED')
-    }
-
-    if (new Date(verification.expires_at).getTime() < Date.now()) {
-      throw new AppError('verification_code_expired', 400, 'VERIFICATION_CODE_EXPIRED')
-    }
-
-    if (verification.code !== payload.verificationCode) {
-      throw new AppError('verification_code_invalid', 400, 'VERIFICATION_CODE_INVALID')
-    }
+    const verification = await assertVerificationCode(
+      context,
+      getLatestVerificationCode(context.database, payload.phone, 'reset_password'),
+      payload.verificationCode,
+    )
 
     const user = context.database
       .prepare('SELECT id, status FROM users WHERE phone = ? LIMIT 1')
@@ -423,30 +568,16 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
       throw new AppError('phone_already_registered', 409, 'PHONE_ALREADY_REGISTERED')
     }
 
-    const oldVerification = getLatestVerificationCode(context.database, payload.oldPhone, 'change_phone')
-    const newVerification = getLatestVerificationCode(context.database, payload.newPhone, 'change_phone')
-
-    if (!oldVerification || !newVerification) {
-      throw new AppError('verification_code_not_found', 400, 'VERIFICATION_CODE_NOT_FOUND')
-    }
-
-    if (oldVerification.used_at || newVerification.used_at) {
-      throw new AppError('verification_code_used', 400, 'VERIFICATION_CODE_USED')
-    }
-
-    if (
-      new Date(oldVerification.expires_at).getTime() < Date.now() ||
-      new Date(newVerification.expires_at).getTime() < Date.now()
-    ) {
-      throw new AppError('verification_code_expired', 400, 'VERIFICATION_CODE_EXPIRED')
-    }
-
-    if (
-      oldVerification.code !== payload.oldVerificationCode ||
-      newVerification.code !== payload.newVerificationCode
-    ) {
-      throw new AppError('verification_code_invalid', 400, 'VERIFICATION_CODE_INVALID')
-    }
+    const oldVerification = await assertVerificationCode(
+      context,
+      getLatestVerificationCode(context.database, payload.oldPhone, 'change_phone'),
+      payload.oldVerificationCode,
+    )
+    const newVerification = await assertVerificationCode(
+      context,
+      getLatestVerificationCode(context.database, payload.newPhone, 'change_phone'),
+      payload.newVerificationCode,
+    )
 
     const now = new Date().toISOString()
 

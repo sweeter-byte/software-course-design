@@ -318,11 +318,15 @@ function Workspace() {
   const codeMutation = useMutation({
     mutationFn: async () => api.requestVerificationCode(apiBaseUrl, registerForm.phone),
     onSuccess: (payload) => {
-      setRegisterForm((current) => ({
-        ...current,
-        verificationCode: payload.previewCode ?? '',
-      }))
-      setNotice(`验证码已回填：${payload.previewCode ?? ''}`)
+      if (payload.previewCode) {
+        setRegisterForm((current) => ({
+          ...current,
+          verificationCode: payload.previewCode ?? '',
+        }))
+        setNotice(`验证码已回填：${payload.previewCode}`)
+      } else {
+        setNotice('验证码已发送，请注意查收。')
+      }
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
@@ -334,7 +338,7 @@ function Workspace() {
         ...current,
         verificationCode: payload.previewCode ?? current.verificationCode,
       }))
-      setNotice(`重置验证码已回填：${payload.previewCode ?? ''}`)
+      setNotice(payload.previewCode ? `重置验证码已回填：${payload.previewCode}` : '重置验证码已发送。')
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })
@@ -437,7 +441,11 @@ function Workspace() {
           ? { ...current, oldVerificationCode: previewCode ?? current.oldVerificationCode }
           : { ...current, newVerificationCode: previewCode ?? current.newVerificationCode },
       )
-      setNotice(`${target === 'old' ? '旧手机号' : '新手机号'}验证码已回填。`)
+      setNotice(
+        previewCode
+          ? `${target === 'old' ? '旧手机号' : '新手机号'}验证码已回填。`
+          : `${target === 'old' ? '旧手机号' : '新手机号'}验证码已发送。`,
+      )
     },
     onError: (error) => setNotice(extractErrorMessage(error)),
   })

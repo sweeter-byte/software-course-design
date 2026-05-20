@@ -105,6 +105,10 @@ trap cleanup EXIT INT TERM
 require_command npm
 mkdir -p "$LOG_DIR"
 
+if load_env_file "$ROOT_DIR/.env.local"; then
+  log "已加载 .env.local"
+fi
+
 if [[ ! -d "$ROOT_DIR/node_modules" ]]; then
   if [[ "$SKIP_INSTALL" == true ]]; then
     log "未检测到 node_modules，且已指定 --skip-install，无法继续。"

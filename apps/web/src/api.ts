@@ -86,7 +86,7 @@ export const api = {
     phone: string,
     purpose: 'register' | 'reset_password' | 'change_phone' = 'register',
   ) {
-    return requestJson<{ previewCode?: string }>(baseUrl, '/auth/verification-code', {
+    return requestJson<{ previewCode?: string; expiresIn?: number }>(baseUrl, '/auth/verification-code', {
       method: 'POST',
       body: { phone, purpose },
     })

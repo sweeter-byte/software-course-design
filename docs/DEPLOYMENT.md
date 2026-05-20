@@ -98,7 +98,26 @@ npm run db:reset --workspace @course/server
 - 移动端通过 Expo 连接本地后端
 - 保留日志文件和测试报告，用于演示异常排查与工程质量
 
-### 3.2 迁移到 MySQL
+### 3.2 CloudBase 验证码模式
+
+默认验证码 provider 为 `local`，开发/测试环境会继续返回 `previewCode` 便于演示和自动化测试。
+如需使用 CloudBase 身份认证 HTTP API 发送真实短信验证码，在后端启动环境中设置：
+
+```bash
+VERIFICATION_PROVIDER=cloudbase
+CLOUDBASE_API_BASE_URL=https://<env-id>.api.tcloudbasegateway.com
+CLOUDBASE_API_TOKEN=<api-key-or-publishable-key>
+```
+
+CloudBase 控制台需要先开启手机号验证码登录。后端会调用：
+
+- `POST /auth/v1/verification` 发送验证码
+- `POST /auth/v1/verification/verify` 校验用户输入验证码
+
+本系统仍使用自己的 `users`、`auth_sessions` 与 JWT；CloudBase 只负责验证码下发与校验。
+`npm run dev` / `bash scripts/dev.sh` 会自动加载项目根目录的 `.env.local`。如果单独运行 `npm run dev:server`，需要先手动执行 `source .env.local` 或把变量导出到当前 shell。
+
+### 3.3 迁移到 MySQL
 
 当前数据层按关系模型组织，可按以下顺序迁移：
 
