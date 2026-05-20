@@ -520,6 +520,15 @@ button {
   box-shadow: none;
 }
 
+a.primary-button,
+a.ghost-button,
+a.danger-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .login-footer {
   margin: 0;
   color: var(--text-muted);
@@ -1023,6 +1032,18 @@ button {
   margin: 0;
   color: var(--text-muted);
   line-height: 1.55;
+}
+
+.course-assignment-detail-body {
+  display: grid;
+  gap: 14px;
+}
+
+.cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
 }
 
 .student-assignment-workspace {
