@@ -97,7 +97,7 @@ describe('WorkspaceContextBar', () => {
     })
 
     const submissionSelect = screen.getByRole('combobox', { name: '提交' })
-    expect(within(submissionSelect).getByText('李同学 / graded')).toBeInTheDocument()
+    expect(within(submissionSelect).getByText('李同学 / 已批改')).toBeInTheDocument()
     expect(submissionSelect).not.toBeDisabled()
     expect(submissionSelect).toHaveValue('submission-1')
   })

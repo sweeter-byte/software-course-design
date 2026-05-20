@@ -7,6 +7,7 @@ import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { AssignmentItem, SubmissionItem } from '../../domain'
 import { formatDateTimeForDisplay } from '../../utils/date'
+import { submissionStatusLabel } from '../../utils/submission-status'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
 
 export function TeacherCourseSubmissionsTab() {
@@ -95,7 +96,7 @@ export function TeacherCourseSubmissionsTab() {
               >
                 <div>
                   <strong>{submission.studentName ?? submission.studentId}</strong>
-                  <span>{submission.status}</span>
+                  <span>{submissionStatusLabel(submission.status)}</span>
                 </div>
                 <p>{submission.content}</p>
                 <small>提交：{formatDateTimeForDisplay(submission.submittedAt)}</small>

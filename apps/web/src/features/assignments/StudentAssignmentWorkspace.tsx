@@ -4,6 +4,8 @@ import { StatePanel } from '../../components/ui/StatePanel'
 import type { AssignmentItem, FeedbackItem } from '../../domain'
 import { assignmentStatusLabel } from '../../utils/assignment-status'
 import { formatDateTimeForDisplay } from '../../utils/date'
+import { feedbackStatusLabel } from '../../utils/feedback-status'
+import { submissionStatusLabel } from '../../utils/submission-status'
 
 type StudentAssignmentWorkspaceProps = {
   assignment: AssignmentItem | null
@@ -121,7 +123,7 @@ export function StudentAssignmentWorkspace({
           <h4>提交与成绩</h4>
           {submission ? (
             <div className="submission-summary">
-              <span>{submission.status}</span>
+              <span>{submissionStatusLabel(submission.status)}</span>
               <strong>{submission.score == null ? '暂无分数' : `${submission.score} 分`}</strong>
               <p>{submission.teacherFeedback ?? '教师暂未填写评语。'}</p>
             </div>
@@ -205,7 +207,7 @@ export function StudentAssignmentWorkspace({
             <article key={feedback.id} className="thread-card">
               <div className="thread-meta">
                 <span>{feedback.kind === 'question' ? '学生问题' : '学生反馈'}</span>
-                <strong>{feedback.status}</strong>
+                <strong>{feedbackStatusLabel(feedback.status)}</strong>
               </div>
               <p>{feedback.content}</p>
             </article>

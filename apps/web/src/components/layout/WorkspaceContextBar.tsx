@@ -1,4 +1,5 @@
 import type { AssignmentItem, CourseItem, SubmissionItem, WorkspaceContext } from '../../domain'
+import { submissionStatusLabel } from '../../utils/submission-status'
 
 type WorkspaceContextBarProps = {
   context: WorkspaceContext
@@ -12,7 +13,7 @@ type WorkspaceContextBarProps = {
 
 function submissionLabel(submission: SubmissionItem) {
   const studentLabel = submission.studentName ?? submission.studentNo ?? submission.studentId
-  return `${studentLabel} / ${submission.status}`
+  return `${studentLabel} / ${submissionStatusLabel(submission.status)}`
 }
 
 export function WorkspaceContextBar({

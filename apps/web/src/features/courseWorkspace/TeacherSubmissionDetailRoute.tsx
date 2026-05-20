@@ -8,6 +8,7 @@ import { useAuth } from '../../contexts/useAuth'
 import type { SubmissionItem } from '../../domain'
 import { formatDateTimeForDisplay } from '../../utils/date'
 import { extractErrorMessage } from '../../utils/errors'
+import { submissionStatusLabel } from '../../utils/submission-status'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
 
 export function TeacherSubmissionDetailRoute() {
@@ -91,7 +92,7 @@ export function TeacherSubmissionDetailRoute() {
           </div>
           <div>
             <dt>当前状态</dt>
-            <dd>{submission.status}</dd>
+            <dd>{submissionStatusLabel(submission.status)}</dd>
           </div>
           {submission.gradedAt ? (
             <div>
