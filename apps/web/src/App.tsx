@@ -34,6 +34,8 @@ import { TeacherCourseOverviewTab } from './features/courseWorkspace/TeacherCour
 import { TeacherCourseSubmissionsTab } from './features/courseWorkspace/TeacherCourseSubmissionsTab'
 import { TeacherFeedbackThreadRoute } from './features/courseWorkspace/TeacherFeedbackThreadRoute'
 import { TeacherSubmissionDetailRoute } from './features/courseWorkspace/TeacherSubmissionDetailRoute'
+import { TeacherAssignmentsRoute } from './features/teacher/TeacherAssignmentsRoute'
+import { TeacherTasksRoute } from './features/teacher/TeacherTasksRoute'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
@@ -116,7 +118,6 @@ interface NavItem {
  * later migration steps.
  */
 const PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
-  '/teacher/tasks',
   '/officer/courses/:courseId/overview',
   '/officer/courses/:courseId/basic-info',
   '/officer/courses/:courseId/assignments',
@@ -179,6 +180,14 @@ function deriveLegacyView(pathname: string, role: UserRole | undefined): LegacyV
   if (role === 'officer' && pathname === '/officer/users') return 'userAdmin'
   if (role === 'officer' && pathname === '/officer/course-feedbacks') return 'courseFeedbacks'
   return null
+}
+
+function derivePageTitle(pathname: string, legacyView: LegacyView | null): string {
+  if (legacyView) return legacyViewLabels[legacyView]
+  if (pathname === '/teacher/tasks') return '教学任务'
+  if (pathname.match(/^\/(student|teacher|officer)\/courses\/[^/]+/)) return '课程工作区'
+  if (pathname.startsWith('/officer/users/')) return '用户管理'
+  return legacyViewLabels.dashboard
 }
 
 const summaryLabels: Record<string, string> = {
@@ -344,7 +353,7 @@ function App() {
   const navItems = currentRole ? roleNavigation[currentRole] : []
   const legacyView = deriveLegacyView(location.pathname, currentRole)
   const visibleView: LegacyView = legacyView ?? 'dashboard'
-  const activePageTitle = legacyViewLabels[visibleView]
+  const activePageTitle = derivePageTitle(location.pathname, legacyView)
 
   const showHero = visibleView === 'dashboard'
   const showAccount = visibleView === 'account'
@@ -1220,6 +1229,10 @@ function App() {
             </Route>
             <Route path="course-feedbacks" element={<StudentCourseFeedbacksOverallTab />} />
           </Route>
+
+          {/* Teacher cross-course pages (§3.4 / §3.5). */}
+          <Route path="/teacher/assignments" element={<TeacherAssignmentsRoute />} />
+          <Route path="/teacher/tasks" element={<TeacherTasksRoute />} />
 
           {/* Teacher course workspace (§3.3). Five tabs covering assignment
               management, grading, feedback answering, and read-only course
