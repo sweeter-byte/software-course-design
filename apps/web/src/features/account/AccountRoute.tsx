@@ -1,11 +1,11 @@
 import { Suspense, lazy, useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import { confirmDestructive } from '../../utils/confirm'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 
 const AccountSection = lazy(() =>
   import('./AccountSection').then((m) => ({ default: m.AccountSection })),
@@ -16,20 +16,12 @@ interface AccountRouteProps {
   onUpdateUser: (next: { phone?: string; username?: string; realName?: string }) => void
 }
 
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
-}
-
 export function AccountRoute({ onSessionInvalidated, onUpdateUser }: AccountRouteProps) {
   const { apiBaseUrl, session } = useAuth()
 
-  const [profileDraft, setProfileDraft] = useState({
+  // Per §0.4, personal-info fields are read-only here; the only edits are
+  // phone and password. So we just surface whatever the session knows.
+  const profileSummary = {
     username: session.user.username,
     realName: session.user.realName,
     email: '',
@@ -37,7 +29,8 @@ export function AccountRoute({ onSessionInvalidated, onUpdateUser }: AccountRout
     college: '',
     major: '',
     className: '',
-  })
+  }
+
   const [passwordDraft, setPasswordDraft] = useState({
     oldPassword: '',
     newPassword: '',
@@ -51,30 +44,6 @@ export function AccountRoute({ onSessionInvalidated, onUpdateUser }: AccountRout
   })
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-
-  const updateProfileMutation = useMutation({
-    mutationFn: async () => {
-      return api.updateProfile(apiBaseUrl, session.accessToken, {
-        username: profileDraft.username,
-        realName: profileDraft.realName,
-        email: profileDraft.email || null,
-        gender: profileDraft.gender || null,
-        college: profileDraft.college || null,
-        major: profileDraft.major || null,
-        className: profileDraft.className || null,
-      })
-    },
-    onSuccess: (payload) => {
-      const user = payload.user as { username?: unknown; realName?: unknown }
-      onUpdateUser({
-        username: String(user.username),
-        realName: String(user.realName),
-      })
-      setNotice('个人资料已更新。')
-      setError(null)
-    },
-    onError: (error) => setError(extractErrorMessage(error)),
-  })
 
   const changePasswordMutation = useMutation({
     mutationFn: async () => api.changePassword(apiBaseUrl, session.accessToken, passwordDraft),
@@ -138,25 +107,22 @@ export function AccountRoute({ onSessionInvalidated, onUpdateUser }: AccountRout
     <section className="account-route section-card wide-card">
       <div className="section-head">
         <h3>账号维护</h3>
-        <p>修改个人资料、密码或注销当前账号。</p>
+        <p>查看个人资料、修改手机号或密码、注销当前账号。</p>
       </div>
       {notice ? <p className="info-banner">{notice}</p> : null}
       {error ? <p className="error-banner">{error}</p> : null}
       <Suspense fallback={<StatePanel title="账号维护加载中" detail="正在准备账号模块。" />}>
         <AccountSection
           phone={session.user.phone}
-          profile={profileDraft}
+          profile={profileSummary}
           password={passwordDraft}
           phoneChange={phoneDraft}
-          isProfilePending={updateProfileMutation.isPending}
           isPasswordPending={changePasswordMutation.isPending}
           isCancelPending={cancelAccountMutation.isPending}
           isPhoneCodePending={phoneCodeMutation.isPending}
           isPhoneChangePending={changePhoneMutation.isPending}
-          onProfileChange={setProfileDraft}
           onPasswordChange={setPasswordDraft}
           onPhoneChange={setPhoneDraft}
-          onSubmitProfile={() => updateProfileMutation.mutate()}
           onSubmitPassword={() => changePasswordMutation.mutate()}
           onCancelAccount={() => {
             if (

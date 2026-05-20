@@ -1,3 +1,9 @@
+/**
+ * Read-only summary of the personal-info fields entered at registration.
+ * Per §0.4, the account-maintenance page only exposes phone + password edits;
+ * everything else is just for review. The legacy ProfileFormState type is kept
+ * so the parent <AccountSection /> contract doesn't churn.
+ */
 export type ProfileFormState = {
   username: string
   realName: string
@@ -10,101 +16,35 @@ export type ProfileFormState = {
 
 type ProfileFormProps = {
   values: ProfileFormState
-  isPending: boolean
-  onChange: (next: ProfileFormState) => void
-  onSubmit: () => void
 }
 
-export function ProfileForm({ values, isPending, onChange, onSubmit }: ProfileFormProps) {
+export function ProfileForm({ values }: ProfileFormProps) {
+  const items: Array<{ label: string; value: string }> = [
+    { label: '用户名', value: values.username },
+    { label: '真实姓名', value: values.realName },
+    { label: '邮箱', value: values.email },
+    { label: '性别', value: values.gender },
+    { label: '学院', value: values.college },
+    { label: '专业', value: values.major },
+    { label: '班级', value: values.className },
+  ]
+
   return (
-    <form
-      className="stack-form"
-      onSubmit={(event) => {
-        event.preventDefault()
-        onSubmit()
-      }}
-    >
-      <div className="form-grid">
-        <label htmlFor="profile-username">
-          用户名
-          <input
-            id="profile-username"
-            name="username"
-            autoComplete="nickname"
-            minLength={2}
-            title="用户名至少 2 位"
-            value={values.username}
-            onChange={(event) => onChange({ ...values, username: event.target.value })}
-          />
-        </label>
-        <label htmlFor="profile-real-name">
-          真实姓名
-          <input
-            id="profile-real-name"
-            name="realName"
-            autoComplete="name"
-            minLength={2}
-            title="真实姓名至少 2 位"
-            value={values.realName}
-            onChange={(event) => onChange({ ...values, realName: event.target.value })}
-          />
-        </label>
-        <label htmlFor="profile-email">
-          邮箱
-          <input
-            id="profile-email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            title="请输入正确的邮箱地址"
-            value={values.email}
-            onChange={(event) => onChange({ ...values, email: event.target.value })}
-          />
-        </label>
-        <label htmlFor="profile-gender">
-          性别
-          <input
-            id="profile-gender"
-            name="gender"
-            autoComplete="sex"
-            value={values.gender}
-            onChange={(event) => onChange({ ...values, gender: event.target.value })}
-          />
-        </label>
-        <label htmlFor="profile-college">
-          学院
-          <input
-            id="profile-college"
-            name="college"
-            autoComplete="organization"
-            value={values.college}
-            onChange={(event) => onChange({ ...values, college: event.target.value })}
-          />
-        </label>
-        <label htmlFor="profile-major">
-          专业
-          <input
-            id="profile-major"
-            name="major"
-            autoComplete="off"
-            value={values.major}
-            onChange={(event) => onChange({ ...values, major: event.target.value })}
-          />
-        </label>
-        <label htmlFor="profile-class-name">
-          班级
-          <input
-            id="profile-class-name"
-            name="className"
-            autoComplete="off"
-            value={values.className}
-            onChange={(event) => onChange({ ...values, className: event.target.value })}
-          />
-        </label>
-      </div>
-      <button className="primary-button" type="submit" disabled={isPending}>
-        {isPending ? '保存中...' : '保存资料'}
-      </button>
-    </form>
+    <section className="profile-summary" aria-label="个人资料">
+      <header>
+        <h4>个人资料</h4>
+        <p className="muted-paragraph">
+          个人资料仅供查看，如需修改请联系教务员。可通过下方表单修改手机号或密码。
+        </p>
+      </header>
+      <dl className="detail-list">
+        {items.map((item) => (
+          <div key={item.label}>
+            <dt>{item.label}</dt>
+            <dd>{item.value || '—'}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }
