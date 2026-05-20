@@ -2,25 +2,15 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext, useParams } from 'react-router-dom'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { AssignmentItem, CourseItem, FeedbackItem } from '../../domain'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 import { StudentAssignmentWorkspace } from '../assignments/StudentAssignmentWorkspace'
 
 interface AssignmentsTabOutletContext {
   course: CourseItem
-}
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
 }
 
 export function StudentAssignmentDetailRoute() {

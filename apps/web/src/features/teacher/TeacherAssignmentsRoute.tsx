@@ -2,29 +2,19 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import { createDefaultAssignmentDates } from '../../demo-defaults'
 import type { AssignmentItem, CourseItem } from '../../domain'
 import { fromDateTimeLocalValue, toDateTimeLocalValue, formatDateTimeForDisplay } from '../../utils/date'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 
 const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
   not_started: '未开始',
   in_progress: '进行中',
   closed: '已截止',
   cancelled: '已取消',
-}
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
 }
 
 interface DraftState {

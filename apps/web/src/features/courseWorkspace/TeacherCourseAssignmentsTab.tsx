@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Outlet, useNavigate, useOutletContext, useParams } from 'react-router-dom'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import { createDefaultAssignmentDates } from '../../demo-defaults'
 import type { AssignmentItem } from '../../domain'
 import { fromDateTimeLocalValue, toDateTimeLocalValue, formatDateTimeForDisplay } from '../../utils/date'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
 
 const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
@@ -16,16 +16,6 @@ const ASSIGNMENT_STATUS_LABELS: Record<string, string> = {
   in_progress: '进行中',
   closed: '已截止',
   cancelled: '已取消',
-}
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
 }
 
 interface DraftState {

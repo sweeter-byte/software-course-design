@@ -2,11 +2,11 @@ import { useDeferredValue, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { CourseItem } from '../../domain'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 
 const STATUS_LABELS: Record<string, string> = {
   not_started: '未开始',
@@ -23,16 +23,6 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'completed', label: '已结课' },
   { value: 'suspended', label: '暂停' },
 ]
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
-}
 
 export function StudentCourseListRoute() {
   const { apiBaseUrl, session } = useAuth()

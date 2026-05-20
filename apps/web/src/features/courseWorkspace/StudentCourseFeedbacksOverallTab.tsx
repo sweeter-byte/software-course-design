@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useOutletContext } from 'react-router-dom'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { CourseFeedbackItem } from '../../domain'
 import { confirmDestructive } from '../../utils/confirm'
 import { formatDateTimeForDisplay } from '../../utils/date'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
 
 type Dimension = CourseFeedbackItem['dimension']
@@ -24,16 +24,6 @@ const DIMENSION_LABELS: Record<Dimension, string> = {
 const DEFAULT_DRAFT: { dimension: Dimension; content: string } = {
   dimension: 'teaching',
   content: '',
-}
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
 }
 
 export function StudentCourseFeedbacksOverallTab() {

@@ -2,24 +2,14 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useOutletContext, useParams } from 'react-router-dom'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { FeedbackItem } from '../../domain'
 import { confirmDestructive } from '../../utils/confirm'
 import { formatDateTimeForDisplay } from '../../utils/date'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
-}
 
 export function StudentFeedbackThreadRoute() {
   const { course } = useOutletContext<CourseWorkspaceOutletContext>()

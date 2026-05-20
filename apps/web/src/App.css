@@ -741,11 +741,6 @@ button {
   min-width: 0;
 }
 
-.dashboard-layout {
-  display: grid;
-  gap: 16px;
-}
-
 .hero-banner {
   padding: 18px 20px;
   display: flex;
@@ -840,17 +835,6 @@ button {
   width: 36px;
   height: 5px;
   border-radius: 99px;
-}
-
-.workspace-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-  align-items: start;
-}
-
-.workspace-grid:has(.section-card:nth-child(3)) {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .section-card {
@@ -1210,8 +1194,6 @@ button {
     grid-template-columns: 210px minmax(0, 1fr);
   }
 
-  .workspace-grid,
-  .workspace-grid:has(.section-card:nth-child(3)),
   .hero-metrics,
   .summary-grid,
   .context-bar {
@@ -1222,14 +1204,11 @@ button {
 @media (max-width: 840px) {
   .login-layout,
   .form-grid,
-  .workspace-grid,
-  .workspace-grid:has(.section-card:nth-child(3)),
   .hero-metrics,
   .summary-grid,
   .context-bar,
   .task-intro,
-  .task-summary-grid,
-  .current-progress-card .bullet-list {
+  .task-summary-grid {
     grid-template-columns: 1fr;
   }
 

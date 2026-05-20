@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { AdminUserItem, UserRole } from '../../domain'
 import { confirmDestructive } from '../../utils/confirm'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 
 const ROLE_LABELS: Record<UserRole, string> = {
   student: '学生',
@@ -26,16 +26,6 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'disabled', label: '已禁用' },
   { value: 'cancelled', label: '已注销' },
 ]
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
-}
 
 interface OfficerUsersTabProps {
   role: UserRole

@@ -2,12 +2,12 @@ import { useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useOutletContext } from 'react-router-dom'
 
-import { ApiError, api } from '../../api'
+import { api } from '../../api'
 import { StatePanel } from '../../components/ui/StatePanel'
 import { useAuth } from '../../contexts/useAuth'
 import type { AssignmentItem, CourseFeedbackItem, CourseItem, FeedbackItem, SubmissionItem } from '../../domain'
 import { confirmDestructive } from '../../utils/confirm'
-import { friendlyErrorMessage } from '../../utils/errors'
+import { extractErrorMessage } from '../../utils/errors'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
@@ -16,16 +16,6 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: 'completed', label: '已结课' },
   { value: 'suspended', label: '暂停' },
 ]
-
-function extractErrorMessage(error: unknown) {
-  if (error instanceof ApiError) {
-    return friendlyErrorMessage(error.message, error.details)
-  }
-  if (error instanceof Error) {
-    return friendlyErrorMessage(error.message)
-  }
-  return '请求失败'
-}
 
 interface DraftState {
   courseCode: string
