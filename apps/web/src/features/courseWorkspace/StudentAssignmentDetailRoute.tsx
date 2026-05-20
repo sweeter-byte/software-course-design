@@ -122,9 +122,29 @@ export function StudentAssignmentDetailRoute() {
     return <StatePanel title="作业不存在" detail="该作业可能已被取消，或不属于当前课程。" />
   }
 
+  const isGraded = assignment.mySubmission?.status === 'graded'
+
   return (
     <div className="course-assignment-detail-body">
       {error ? <p className="error-banner">{error}</p> : null}
+      {isGraded ? (
+        <div className="cta-row">
+          <a
+            href="#student-feedback-content"
+            className="primary-button"
+            onClick={(event) => {
+              event.preventDefault()
+              const target = document.getElementById('student-feedback-content')
+              if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                target.focus()
+              }
+            }}
+          >
+            我有问题/反馈
+          </a>
+        </div>
+      ) : null}
       <StudentAssignmentWorkspace
         assignment={assignment}
         feedbacks={feedbacksQuery.data?.items ?? []}

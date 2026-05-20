@@ -22,7 +22,10 @@ import { StudentAssignmentWorkspace } from './features/assignments/StudentAssign
 import { CourseWorkspace } from './features/courseWorkspace/CourseWorkspace'
 import { StudentAssignmentDetailRoute } from './features/courseWorkspace/StudentAssignmentDetailRoute'
 import { StudentCourseAssignmentsTab } from './features/courseWorkspace/StudentCourseAssignmentsTab'
+import { StudentCourseFeedbacksOverallTab } from './features/courseWorkspace/StudentCourseFeedbacksOverallTab'
+import { StudentCourseFeedbacksTab } from './features/courseWorkspace/StudentCourseFeedbacksTab'
 import { StudentCourseOverviewTab } from './features/courseWorkspace/StudentCourseOverviewTab'
+import { StudentFeedbackThreadRoute } from './features/courseWorkspace/StudentFeedbackThreadRoute'
 import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
@@ -105,9 +108,6 @@ interface NavItem {
  * later migration steps.
  */
 const PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
-  '/student/courses/:courseId/feedbacks',
-  '/student/courses/:courseId/feedbacks/:feedbackId',
-  '/student/courses/:courseId/course-feedbacks',
   '/teacher/courses/:courseId/overview',
   '/teacher/courses/:courseId/assignments',
   '/teacher/courses/:courseId/assignments/:assignmentId',
@@ -1198,8 +1198,7 @@ function App() {
           <Route path="/teacher/courses/:courseId" element={<Navigate to="overview" replace />} />
           <Route path="/officer/courses/:courseId" element={<Navigate to="overview" replace />} />
 
-          {/* Student course workspace (§2.2). Overview + Assignments tabs
-              are migrated; the rest still falls through to placeholders. */}
+          {/* Student course workspace (§2.2). All four tabs are migrated. */}
           <Route
             path="/student/courses/:courseId"
             element={<CourseWorkspace role="student" tabs={STUDENT_COURSE_WORKSPACE_TABS} />}
@@ -1208,6 +1207,10 @@ function App() {
             <Route path="assignments" element={<StudentCourseAssignmentsTab />}>
               <Route path=":assignmentId" element={<StudentAssignmentDetailRoute />} />
             </Route>
+            <Route path="feedbacks" element={<StudentCourseFeedbacksTab />}>
+              <Route path=":feedbackId" element={<StudentFeedbackThreadRoute />} />
+            </Route>
+            <Route path="course-feedbacks" element={<StudentCourseFeedbacksOverallTab />} />
           </Route>
 
           {PLACEHOLDER_ROUTES.map((path) => (
