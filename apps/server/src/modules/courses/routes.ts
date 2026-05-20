@@ -19,6 +19,8 @@ type CourseRow = {
   course_name: string
   description: string
   teacher_id: string
+  teacher_name?: string | null
+  teacher_no?: string | null
   semester: string
   location: string
   schedule_text: string
@@ -36,6 +38,8 @@ function toCourse(row: CourseRow, options?: { includeEnrolled?: boolean }) {
     courseName: row.course_name,
     description: row.description,
     teacherId: row.teacher_id,
+    teacherName: row.teacher_name ?? null,
+    teacherNo: row.teacher_no ?? null,
     semester: row.semester,
     location: row.location,
     scheduleText: row.schedule_text,
@@ -63,6 +67,8 @@ function getCourseById(database: DatabaseSync, courseId: string, studentId?: str
             courses.course_name,
             courses.description,
             courses.teacher_id,
+            teachers.real_name AS teacher_name,
+            teachers.teacher_no AS teacher_no,
             courses.semester,
             courses.location,
             courses.schedule_text,
@@ -72,6 +78,8 @@ function getCourseById(database: DatabaseSync, courseId: string, studentId?: str
             courses.status,
             CASE WHEN enrollments.id IS NULL THEN 0 ELSE 1 END AS enrolled
           FROM courses
+          LEFT JOIN users AS teachers
+            ON teachers.id = courses.teacher_id
           LEFT JOIN course_enrollments AS enrollments
             ON enrollments.course_id = courses.id
             AND enrollments.student_id = ?
@@ -87,20 +95,24 @@ function getCourseById(database: DatabaseSync, courseId: string, studentId?: str
     .prepare(
       `
         SELECT
-          id,
-          course_code,
-          course_name,
-          description,
-          teacher_id,
-          semester,
-          location,
-          schedule_text,
-          capacity,
-          start_date,
-          end_date,
-          status
+          courses.id,
+          courses.course_code,
+          courses.course_name,
+          courses.description,
+          courses.teacher_id,
+          teachers.real_name AS teacher_name,
+          teachers.teacher_no AS teacher_no,
+          courses.semester,
+          courses.location,
+          courses.schedule_text,
+          courses.capacity,
+          courses.start_date,
+          courses.end_date,
+          courses.status
         FROM courses
-        WHERE id = ?
+        LEFT JOIN users AS teachers
+          ON teachers.id = courses.teacher_id
+        WHERE courses.id = ?
         LIMIT 1
       `,
     )
@@ -181,6 +193,38 @@ export function registerCourseRoutes(app: FastifyInstance, context: CourseRouteC
       },
       'course_enrolled',
     )
+  })
+
+  app.get('/options', async (request) => {
+    await requireRole(request, ['officer'])
+
+    const semesterRows = context.database
+      .prepare(
+        `SELECT DISTINCT semester FROM courses
+         WHERE semester IS NOT NULL AND semester != ''
+         ORDER BY semester DESC`,
+      )
+      .all() as Array<{ semester: string }>
+
+    const locationRows = context.database
+      .prepare(
+        `SELECT DISTINCT location FROM courses
+         WHERE location IS NOT NULL AND location != ''
+         ORDER BY location`,
+      )
+      .all() as Array<{ location: string }>
+
+    return {
+      success: true,
+      message: 'ok',
+      data: {
+        semesters: semesterRows.map((row) => row.semester),
+        locations: locationRows.map((row) => row.location),
+      },
+      meta: {
+        requestId: request.id,
+      },
+    }
   })
 
   app.get('/:courseId', async (request) => {

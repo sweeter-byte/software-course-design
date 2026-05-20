@@ -244,6 +244,13 @@ export const api = {
       token,
     })
   },
+  listCourseOptions(baseUrl: string, token: string) {
+    return requestJson<{ semesters: string[]; locations: string[] }>(
+      baseUrl,
+      `/courses/options`,
+      { token },
+    )
+  },
   createCourse(
     baseUrl: string,
     token: string,

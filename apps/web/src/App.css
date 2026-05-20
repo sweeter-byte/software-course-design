@@ -526,6 +526,72 @@ button {
   font-size: 0.88rem;
 }
 
+.combobox {
+  position: relative;
+  display: grid;
+  gap: 6px;
+}
+
+.combobox-options {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  margin: 4px 0 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+}
+
+.combobox-options li {
+  margin: 0;
+}
+
+.combobox-options button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.combobox-options button:hover,
+.combobox-options button.is-active {
+  background: rgba(0, 91, 172, 0.08);
+  color: var(--nuaa-blue-dark);
+}
+
+.combobox-empty {
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.combobox-hint {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.combobox-hint--idle {
+  color: var(--text-muted);
+}
+
+.combobox-hint--ok {
+  color: #15803d;
+}
+
+.combobox-hint--error {
+  color: var(--danger);
+}
+
 .page-shell {
   display: grid;
   grid-template-columns: 232px minmax(0, 1fr);
@@ -1187,6 +1253,112 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface-soft);
+}
+
+.muted-text {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.course-workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.course-workspace-head {
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 16px;
+}
+
+.course-workspace-title {
+  display: grid;
+  gap: 4px;
+}
+
+.course-workspace-title h3 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.course-context-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.course-context-grid > div {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-soft);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.course-context-grid dt {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.course-context-grid dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.96rem;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.course-workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+}
+
+.tab-link {
+  padding: 8px 16px;
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+  font-weight: 760;
+  text-decoration: none;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.tab-link:hover {
+  color: var(--nuaa-blue-dark);
+  background: var(--nuaa-blue-soft);
+}
+
+.tab-link.active {
+  color: #ffffff;
+  background: var(--nuaa-blue);
+  box-shadow: 0 4px 12px rgba(0, 91, 172, 0.18);
+}
+
+.course-workspace-body {
+  display: grid;
+  gap: 16px;
 }
 
 @media (max-width: 1180px) {

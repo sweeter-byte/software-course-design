@@ -6,6 +6,8 @@ export type CourseItem = {
   courseName: string
   description: string
   teacherId: string
+  teacherName?: string | null
+  teacherNo?: string | null
   semester: string
   location: string
   scheduleText: string

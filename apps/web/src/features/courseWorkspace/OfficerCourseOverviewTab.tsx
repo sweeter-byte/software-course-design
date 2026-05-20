@@ -50,7 +50,13 @@ export function OfficerCourseOverviewTab() {
           </div>
           <div>
             <dt>授课教师</dt>
-            <dd>{course.teacherId}</dd>
+            <dd>
+              {course.teacherName
+                ? course.teacherNo
+                  ? `${course.teacherName}（${course.teacherNo}）`
+                  : course.teacherName
+                : course.teacherId}
+            </dd>
           </div>
           <div>
             <dt>上课时间</dt>

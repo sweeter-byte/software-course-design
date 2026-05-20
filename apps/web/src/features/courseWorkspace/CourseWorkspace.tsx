@@ -95,10 +95,17 @@ export function CourseWorkspace({ role, tabs }: CourseWorkspaceProps) {
   )
 }
 
+function formatTeacher(course: CourseItem): string {
+  if (course.teacherName && course.teacherNo) {
+    return `${course.teacherName}（${course.teacherNo}）`
+  }
+  return course.teacherName ?? course.teacherNo ?? course.teacherId
+}
+
 function buildHeaderContext(role: UserRole, course: CourseItem | null) {
   if (!course) return []
   const items: Array<{ label: string; value: string }> = [
-    { label: '授课教师', value: course.teacherId },
+    { label: '授课教师', value: formatTeacher(course) },
     { label: '学期', value: course.semester },
     { label: '上课时间', value: course.scheduleText },
     { label: '上课地点', value: course.location },

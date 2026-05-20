@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 
@@ -52,6 +52,131 @@ function makeBlankDraft(): DraftState {
   }
 }
 
+interface TeacherComboboxProps {
+  teachers: AdminUserItem[]
+  value: string
+  onChange: (teacherId: string) => void
+  inputId: string
+  required?: boolean
+  disabled?: boolean
+}
+
+function TeacherCombobox({
+  teachers,
+  value,
+  onChange,
+  inputId,
+  required,
+  disabled,
+}: TeacherComboboxProps) {
+  const options = useMemo(
+    () =>
+      teachers
+        .filter((teacher) => Boolean(teacher.teacherNo))
+        .map((teacher) => ({
+          id: teacher.id,
+          teacherNo: teacher.teacherNo as string,
+          realName: teacher.realName,
+        }))
+        .sort((a, b) => a.teacherNo.localeCompare(b.teacherNo)),
+    [teachers],
+  )
+
+  const selected = useMemo(
+    () => options.find((option) => option.id === value) ?? null,
+    [options, value],
+  )
+
+  const [query, setQuery] = useState(() => selected?.teacherNo ?? '')
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    function handlePointer(event: MouseEvent) {
+      if (!containerRef.current) return
+      if (!containerRef.current.contains(event.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handlePointer)
+    return () => document.removeEventListener('mousedown', handlePointer)
+  }, [])
+
+  const trimmed = query.trim()
+  const filtered = trimmed
+    ? options.filter((option) =>
+        option.teacherNo.toLowerCase().startsWith(trimmed.toLowerCase()),
+      )
+    : options
+
+  const exactMatch = options.find((option) => option.teacherNo === trimmed) ?? null
+
+  const hint: { kind: 'ok' | 'error' | 'idle'; text: string } =
+    trimmed === ''
+      ? { kind: 'idle', text: '从下拉列表中选择教师，可输入编号前缀过滤。' }
+      : exactMatch
+        ? { kind: 'ok', text: `已选择：${exactMatch.realName}` }
+        : { kind: 'error', text: '未找到匹配的教师编号，请从下拉列表中选择。' }
+
+  function handleSelect(option: { id: string; teacherNo: string }) {
+    onChange(option.id)
+    setQuery(option.teacherNo)
+    setOpen(false)
+  }
+
+  function handleChange(nextValue: string) {
+    setQuery(nextValue)
+    setOpen(true)
+    const match = options.find((option) => option.teacherNo === nextValue.trim())
+    onChange(match?.id ?? '')
+  }
+
+  return (
+    <div className="combobox" ref={containerRef}>
+      <input
+        id={inputId}
+        type="text"
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={`${inputId}-listbox`}
+        placeholder="输入教师编号前缀以查询"
+        required={required}
+        disabled={disabled}
+        value={query}
+        onFocus={() => setOpen(true)}
+        onChange={(event) => handleChange(event.target.value)}
+      />
+      {open && filtered.length > 0 ? (
+        <ul
+          id={`${inputId}-listbox`}
+          role="listbox"
+          className="combobox-options"
+        >
+          {filtered.slice(0, 50).map((option) => (
+            <li key={option.id} role="option" aria-selected={option.id === value}>
+              <button
+                type="button"
+                className={option.id === value ? 'is-active' : ''}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => handleSelect(option)}
+              >
+                {option.teacherNo}（{option.realName}）
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {open && filtered.length === 0 ? (
+        <ul className="combobox-options" role="listbox">
+          <li className="combobox-empty">没有匹配的教师编号</li>
+        </ul>
+      ) : null}
+      <small className={`combobox-hint combobox-hint--${hint.kind}`}>{hint.text}</small>
+    </div>
+  )
+}
+
 export function OfficerCourseListRoute() {
   const { apiBaseUrl, session } = useAuth()
   const navigate = useNavigate()
@@ -100,6 +225,19 @@ export function OfficerCourseListRoute() {
 
   const teachers = teachersQuery.data?.users ?? []
 
+  const courseOptionsQuery = useQuery<{ semesters: string[]; locations: string[] }>({
+    queryKey: ['courseOptions', apiBaseUrl, session.accessToken],
+    queryFn: async () => {
+      const payload = await api.listCourseOptions(apiBaseUrl, session.accessToken)
+      return { semesters: payload.semesters ?? [], locations: payload.locations ?? [] }
+    },
+  })
+
+  const semesterSuggestions = courseOptionsQuery.data?.semesters ?? []
+  const locationSuggestions = courseOptionsQuery.data?.locations ?? []
+
+  const teacherIsValid = teachers.some((teacher) => teacher.id === draft.teacherId)
+
   const createMutation = useMutation({
     mutationFn: async () => {
       return api.createCourse(apiBaseUrl, session.accessToken, {
@@ -120,6 +258,7 @@ export function OfficerCourseListRoute() {
       setShowCreate(false)
       setDraft(makeBlankDraft())
       queryClient.invalidateQueries({ queryKey: ['courses'] })
+      queryClient.invalidateQueries({ queryKey: ['courseOptions'] })
       const created = payload.course as { id?: string } | undefined
       if (created?.id) {
         navigate(`/officer/courses/${created.id}`)
@@ -205,6 +344,11 @@ export function OfficerCourseListRoute() {
             className="stack-form"
             onSubmit={(event) => {
               event.preventDefault()
+              if (!teacherIsValid) {
+                setError('请从下拉列表中选择有效的授课教师编号')
+                return
+              }
+              setError(null)
               createMutation.mutate()
             }}
           >
@@ -235,12 +379,13 @@ export function OfficerCourseListRoute() {
               </label>
               <label htmlFor="new-course-teacher">
                 授课教师编号
-                <input
-                  id="new-course-teacher"
+                <TeacherCombobox
+                  inputId="new-course-teacher"
                   required
+                  teachers={teachers}
                   value={draft.teacherId}
-                  onChange={(event) =>
-                    setDraft((current) => ({ ...current, teacherId: event.target.value }))
+                  onChange={(teacherId) =>
+                    setDraft((current) => ({ ...current, teacherId }))
                   }
                 />
               </label>
@@ -250,22 +395,36 @@ export function OfficerCourseListRoute() {
                   id="new-course-semester"
                   required
                   minLength={2}
+                  list="new-course-semester-options"
+                  placeholder="例如 2026 春，可从已有学期中选择"
                   value={draft.semester}
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, semester: event.target.value }))
                   }
                 />
+                <datalist id="new-course-semester-options">
+                  {semesterSuggestions.map((value) => (
+                    <option key={value} value={value} />
+                  ))}
+                </datalist>
               </label>
               <label htmlFor="new-course-location">
                 授课地点
                 <input
                   id="new-course-location"
                   required
+                  list="new-course-location-options"
+                  placeholder="例如 教学楼 A-301，可从已有地点中选择"
                   value={draft.location}
                   onChange={(event) =>
                     setDraft((current) => ({ ...current, location: event.target.value }))
                   }
                 />
+                <datalist id="new-course-location-options">
+                  {locationSuggestions.map((value) => (
+                    <option key={value} value={value} />
+                  ))}
+                </datalist>
               </label>
               <label htmlFor="new-course-schedule">
                 上课时间
@@ -331,7 +490,11 @@ export function OfficerCourseListRoute() {
                 />
               </label>
             </div>
-            <button className="primary-button" type="submit" disabled={createMutation.isPending}>
+            <button
+              className="primary-button"
+              type="submit"
+              disabled={createMutation.isPending || !teacherIsValid}
+            >
               {createMutation.isPending ? '创建中...' : '创建课程'}
             </button>
           </form>
