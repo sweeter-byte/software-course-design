@@ -18,3 +18,9 @@ apps/mobile/.git.local-backup/
 coverage/
 .DS_Store
 .superpowers/
+
+# Local-only docs and assets (kept out of the remote repository)
+CLAUDE.md
+codex_constitution_prompt.md
+2026 软件工程综合课设验收安排.ppt
+docs/
