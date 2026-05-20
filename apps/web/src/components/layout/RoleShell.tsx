@@ -3,9 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom'
 
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { SidebarDrawer } from './SidebarDrawer'
-import { WorkspaceContextBar } from './WorkspaceContextBar'
 import { NotificationStack } from '../notifications/NotificationStack'
-import type { AssignmentItem, CourseItem, SubmissionItem, UserRole, WorkspaceContext } from '../../domain'
+import type { UserRole } from '../../domain'
 import type { Notification } from '../../hooks/useNotifications'
 
 export interface RoleShellNavItem {
@@ -30,13 +29,6 @@ export interface RoleShellProps {
   guideTip: string
   notifications: Notification[]
   onDismissNotification: (id: number) => void
-  workspaceContext: WorkspaceContext
-  courses: CourseItem[]
-  assignments: AssignmentItem[]
-  submissions: SubmissionItem[]
-  onCourseChange: (courseId: string) => void
-  onAssignmentChange: (assignmentId: string) => void
-  onSubmissionChange: (submissionId: string) => void
   onLogout: () => void
   isLoggingOut: boolean
   children: ReactNode
@@ -160,15 +152,6 @@ export function RoleShell(props: RoleShellProps) {
         <NotificationStack
           notifications={props.notifications}
           onDismiss={props.onDismissNotification}
-        />
-        <WorkspaceContextBar
-          context={props.workspaceContext}
-          courses={props.courses}
-          assignments={props.assignments}
-          submissions={props.submissions}
-          onCourseChange={props.onCourseChange}
-          onAssignmentChange={props.onAssignmentChange}
-          onSubmissionChange={props.onSubmissionChange}
         />
 
         {props.children}

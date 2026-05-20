@@ -19,20 +19,20 @@ const studentAssignmentSource = readFileSync(
   path.resolve(currentDir, 'features/assignments/StudentAssignmentWorkspace.tsx'),
   'utf8',
 )
-const teacherTaskSource = readFileSync(
-  path.resolve(currentDir, 'features/teacher/TeacherTaskWorkspace.tsx'),
+const teacherTasksRouteSource = readFileSync(
+  path.resolve(currentDir, 'features/teacher/TeacherTasksRoute.tsx'),
   'utf8',
 )
-const feedbackThreadListSource = readFileSync(
-  path.resolve(currentDir, 'features/teacher/FeedbackThreadList.tsx'),
+const teacherFeedbackThreadSource = readFileSync(
+  path.resolve(currentDir, 'features/courseWorkspace/TeacherFeedbackThreadRoute.tsx'),
   'utf8',
 )
-const courseFeedbackOverviewSource = readFileSync(
-  path.resolve(currentDir, 'features/teacher/CourseFeedbackOverview.tsx'),
+const teacherCourseFeedbacksReadonlySource = readFileSync(
+  path.resolve(currentDir, 'features/courseWorkspace/TeacherCourseFeedbacksReadonlyTab.tsx'),
   'utf8',
 )
-const submissionDetailSource = readFileSync(
-  path.resolve(currentDir, 'features/teacher/SubmissionDetailCard.tsx'),
+const teacherSubmissionDetailSource = readFileSync(
+  path.resolve(currentDir, 'features/courseWorkspace/TeacherSubmissionDetailRoute.tsx'),
   'utf8',
 )
 const loginShellSource = readFileSync(
@@ -72,8 +72,10 @@ describe('frontend display copy', () => {
     expect(productSource).toContain('账号登录')
     expect(productSource).toContain('学生注册')
     expect(roleShellSource).toContain('使用指引')
-    expect(appSource).toContain('课程列表')
-    expect(appSource).toContain('当前进度')
+    // Role-specific navigation labels live in App.tsx's roleNavigation map.
+    expect(appSource).toContain('我的课程')
+    expect(appSource).toContain('授课课程')
+    expect(appSource).toContain('课程运营')
   })
 
   it('contains redesigned workflow copy', () => {
@@ -81,19 +83,22 @@ describe('frontend display copy', () => {
       appSource,
       contextBarSource,
       studentAssignmentSource,
-      teacherTaskSource,
-      feedbackThreadListSource,
-      courseFeedbackOverviewSource,
-      submissionDetailSource,
+      teacherTasksRouteSource,
+      teacherFeedbackThreadSource,
+      teacherCourseFeedbacksReadonlySource,
+      teacherSubmissionDetailSource,
     ].join('\n')
 
     expect(workflowSource).toContain('当前工作上下文')
     expect(workflowSource).toContain('课程 / 作业 / 提交')
     expect(workflowSource).toContain('我的作业')
-    expect(workflowSource).toContain('待回复反馈')
     expect(workflowSource).toContain('提交与成绩')
     expect(workflowSource).toContain('批改后可发起作业问题或反馈')
-    expect(workflowSource).toContain('教师任务工作台')
-    expect(workflowSource).toContain('回复学生')
+    // Teacher task-flow copy is now split across TeacherTasksRoute and the
+    // course-workspace feedback thread route.
+    expect(workflowSource).toContain('教学任务')
+    expect(workflowSource).toContain('待批改提交')
+    expect(workflowSource).toContain('未回答作业反馈')
+    expect(workflowSource).toContain('教师回复')
   })
 })

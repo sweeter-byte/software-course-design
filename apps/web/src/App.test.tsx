@@ -29,6 +29,7 @@ vi.mock('@tanstack/react-query', () => {
     QueryClient: vi.fn(),
     QueryClientProvider: ({ children }: { children: ReactNode }) => children,
     useQuery: () => loadingQuery,
+    useQueries: () => [],
     useMutation: () => idleMutation,
     useQueryClient: () => ({
       invalidateQueries: vi.fn(),
@@ -82,34 +83,31 @@ afterEach(() => {
 })
 
 describe('App routing', () => {
-  it('renders only the account section on /student/account', async () => {
+  it('renders the account section on /student/account', async () => {
     window.localStorage.setItem('cms_session', JSON.stringify(studentSession))
 
     renderAppAt('/student/account')
 
-    // Account SectionCard heading appears once the lazy chunk resolves.
+    // AccountRoute's header heading.
     await screen.findByRole('heading', { name: '账号维护', level: 3 })
 
-    // Other workspace SectionCard headings must NOT mount on this view.
-    expect(screen.queryByRole('heading', { name: '课程列表' })).toBeNull()
-    expect(screen.queryByRole('heading', { name: '当前进度' })).toBeNull()
-    expect(screen.queryByRole('heading', { name: '互动交流' })).toBeNull()
-    expect(screen.queryByRole('heading', { name: '作业安排' })).toBeNull()
-    expect(screen.queryByRole('heading', { name: '课程反馈' })).toBeNull()
+    // The student course list and dashboard summary should not mount here.
+    expect(screen.queryByRole('heading', { name: '我的课程', level: 3 })).toBeNull()
+    expect(screen.queryByRole('heading', { name: '工作台', level: 2 })).toBeNull()
   })
 
-  it('redirects /teacher/interaction back to the teacher dashboard', async () => {
+  it('redirects unknown teacher paths to the teacher dashboard', async () => {
     window.localStorage.setItem('cms_session', JSON.stringify(teacherSession))
 
     renderAppAt('/teacher/interaction')
 
-    // Teacher dashboard shows the course list SectionCard; interaction is no
-    // longer in the teacher navigation, so the route should fall back.
-    await screen.findByRole('heading', { name: '课程列表' })
-
+    // /teacher/interaction is no longer a known route, so the catch-all
+    // redirects it to /teacher/dashboard which renders DashboardRoute.
     await waitFor(() => {
-      expect(screen.queryByRole('heading', { name: '互动交流' })).toBeNull()
+      expect(screen.queryByText('当前账号')).not.toBeNull()
     })
-    expect(screen.queryByRole('heading', { name: '账号维护' })).toBeNull()
+
+    // Legacy 互动交流 heading must not appear.
+    expect(screen.queryByRole('heading', { name: '互动交流' })).toBeNull()
   })
 })
