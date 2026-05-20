@@ -1,6 +1,6 @@
 import { Suspense, lazy, startTransition, useDeferredValue, useEffect, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import './App.css'
 import { ApiError, api, type SessionPayload } from './api'
@@ -24,6 +24,8 @@ import { TeacherTaskWorkspace } from './features/teacher/TeacherTaskWorkspace'
 import { useMediaQuery } from './hooks/useMediaQuery'
 import { useNotifications } from './hooks/useNotifications'
 import { resolveWorkspaceContext, useWorkspaceSelection } from './hooks/useWorkspaceContext'
+import { RoutePlaceholder } from './routes/RoutePlaceholder'
+import { dashboardPath } from './routes/paths'
 import { readInitialRuntimeState } from './runtime-state'
 import { confirmDestructive } from './utils/confirm'
 import { formatDateTimeForDisplay, fromDateTimeLocalValue, toDateTimeLocalValue } from './utils/date'
@@ -39,7 +41,14 @@ const UserAdminSection = lazy(() =>
 const DEFAULT_API_BASE_URL = 'http://localhost:4100/api/v1'
 
 type SummaryRecord = Record<string, number>
-type WorkspaceView =
+
+/**
+ * Per §1.1, the URL itself is the navigation contract. `LegacyView` is the
+ * short-lived bridge type that the still-monolithic dashboard layout in this
+ * file uses to decide which legacy SectionCard to render. It will be removed
+ * once every route below has its own component (see §1.3 step 8).
+ */
+type LegacyView =
   | 'dashboard'
   | 'courses'
   | 'courseAdmin'
@@ -70,80 +79,92 @@ const roleWorkspaceDescriptions: Record<UserRole, string> = {
   officer: '统筹课程基础信息，查看平台运行概况与教学状态。',
 }
 
-const viewLabels: Record<WorkspaceView, string> = {
+const legacyViewLabels: Record<LegacyView, string> = {
   dashboard: '工作台',
   courses: '课程',
   courseAdmin: '课程维护',
-  assignments: '作业管理',
-  grading: '教师任务',
+  assignments: '作业',
+  grading: '教学任务',
   courseFeedbacks: '课程反馈',
   interaction: '互动交流',
   userAdmin: '用户管理',
   account: '账号维护',
 }
 
-const roleNavigation: Record<UserRole, Array<{ view: WorkspaceView; label: string; hint: string }>> = {
+interface NavItem {
+  to: string
+  label: string
+  hint: string
+}
+
+/**
+ * Routes from §1.1 that don't yet have a dedicated screen. Each is rendered
+ * through <RoutePlaceholder/> in step 1 and replaced with a real component in
+ * later migration steps.
+ */
+const STEP1_PLACEHOLDER_ROUTES: ReadonlyArray<string> = [
+  '/student/courses/:courseId/overview',
+  '/student/courses/:courseId/assignments',
+  '/student/courses/:courseId/assignments/:assignmentId',
+  '/student/courses/:courseId/feedbacks',
+  '/student/courses/:courseId/feedbacks/:feedbackId',
+  '/student/courses/:courseId/course-feedbacks',
+  '/teacher/courses/:courseId/overview',
+  '/teacher/courses/:courseId/assignments',
+  '/teacher/courses/:courseId/assignments/:assignmentId',
+  '/teacher/courses/:courseId/submissions',
+  '/teacher/courses/:courseId/submissions/:submissionId',
+  '/teacher/courses/:courseId/feedbacks',
+  '/teacher/courses/:courseId/feedbacks/:feedbackId',
+  '/teacher/courses/:courseId/course-feedbacks',
+  '/teacher/tasks',
+  '/officer/courses/:courseId/overview',
+  '/officer/courses/:courseId/basic-info',
+  '/officer/courses/:courseId/assignments',
+  '/officer/courses/:courseId/course-feedbacks',
+  '/officer/users/students',
+  '/officer/users/teachers',
+  '/officer/users/officers',
+]
+
+const roleNavigation: Record<UserRole, NavItem[]> = {
   student: [
-    { view: 'dashboard', label: '工作台', hint: '学习总览' },
-    { view: 'courses', label: '课程', hint: '课程检索与加入' },
-    { view: 'assignments', label: '我的作业', hint: '查看作业与提交答案' },
-    { view: 'courseFeedbacks', label: '课程反馈', hint: '课程维度反馈' },
-    { view: 'interaction', label: '互动交流', hint: '问题与教师回复' },
-    { view: 'account', label: '账号维护', hint: '资料与安全' },
+    { to: '/student/dashboard', label: '工作台', hint: '学习总览' },
+    { to: '/student/courses', label: '我的课程', hint: '课程检索与加入' },
+    { to: '/student/assignments', label: '我的作业', hint: '跨课程作业汇总' },
+    { to: '/student/account', label: '账号维护', hint: '资料与安全' },
   ],
   teacher: [
-    { view: 'dashboard', label: '工作台', hint: '教学处理总览' },
-    { view: 'courses', label: '课程', hint: '授课课程列表' },
-    { view: 'assignments', label: '作业管理', hint: '发布与维护作业' },
-    { view: 'grading', label: '教学任务', hint: '批改提交 · 回复反馈' },
-    { view: 'courseFeedbacks', label: '课程反馈', hint: '学生课程反馈' },
-    { view: 'account', label: '账号维护', hint: '资料与安全' },
+    { to: '/teacher/dashboard', label: '工作台', hint: '教学处理总览' },
+    { to: '/teacher/courses', label: '授课课程', hint: '授课课程列表' },
+    { to: '/teacher/assignments', label: '作业管理', hint: '跨课程作业对象' },
+    { to: '/teacher/tasks', label: '教学任务', hint: '批改与答疑待办' },
+    { to: '/teacher/account', label: '账号维护', hint: '资料与安全' },
   ],
   officer: [
-    { view: 'dashboard', label: '工作台', hint: '平台运行总览' },
-    { view: 'courses', label: '课程列表', hint: '课程查询与详情' },
-    { view: 'courseAdmin', label: '课程维护', hint: '创建与修改课程' },
-    { view: 'userAdmin', label: '用户管理', hint: '账号列表与启停' },
-    { view: 'courseFeedbacks', label: '反馈总览', hint: '课程反馈查看' },
-    { view: 'account', label: '账号维护', hint: '资料与安全' },
+    { to: '/officer/dashboard', label: '工作台', hint: '平台运行总览' },
+    { to: '/officer/courses', label: '课程运营', hint: '课程信息与详情' },
+    { to: '/officer/users', label: '用户管理', hint: '账号列表与启停' },
+    { to: '/officer/course-feedbacks', label: '课程反馈查看', hint: '课程整体反馈' },
+    { to: '/officer/account', label: '账号维护', hint: '资料与安全' },
   ],
 }
 
-const viewToSegment: Record<WorkspaceView, string> = {
-  dashboard: 'dashboard',
-  courses: 'courses',
-  courseAdmin: 'course-admin',
-  assignments: 'assignments',
-  grading: 'grading',
-  courseFeedbacks: 'course-feedbacks',
-  interaction: 'interaction',
-  userAdmin: 'user-admin',
-  account: 'account',
-}
-
-const segmentToView: Record<string, WorkspaceView> = Object.fromEntries(
-  (Object.entries(viewToSegment) as Array<[WorkspaceView, string]>).map(([view, segment]) => [
-    segment,
-    view,
-  ]),
-)
-
-function viewPath(role: UserRole, view: WorkspaceView): string {
-  return `/${role}/${viewToSegment[view]}`
-}
-
-function parseRouteView(
-  pathname: string,
-  role: UserRole | undefined,
-): WorkspaceView | null {
+/**
+ * Maps the current URL to a legacy view name for the still-inline dashboard
+ * layout. Returns null when the URL is a §1.1 route that has not yet been
+ * implemented (those are handled by <RoutePlaceholder>) or when no role is set.
+ */
+function deriveLegacyView(pathname: string, role: UserRole | undefined): LegacyView | null {
   if (!role) return null
-  const match = /^\/(student|teacher|officer)\/([a-z-]+)\/?$/.exec(pathname)
-  if (!match) return null
-  if (match[1] !== role) return null
-  const view = segmentToView[match[2]]
-  if (!view) return null
-  if (!roleNavigation[role].some((item) => item.view === view)) return null
-  return view
+  if (pathname === `/${role}/dashboard`) return 'dashboard'
+  if (pathname === `/${role}/courses`) return 'courses'
+  if (pathname === `/${role}/account`) return 'account'
+  if (role === 'student' && pathname === '/student/assignments') return 'assignments'
+  if (role === 'teacher' && pathname === '/teacher/assignments') return 'assignments'
+  if (role === 'officer' && pathname === '/officer/users') return 'userAdmin'
+  if (role === 'officer' && pathname === '/officer/course-feedbacks') return 'courseFeedbacks'
+  return null
 }
 
 const summaryLabels: Record<string, string> = {
@@ -310,9 +331,9 @@ function App() {
   const isDrawerOpen = isCompactViewport && isMobileNavOpen
   const currentRole = session?.user.role
   const navItems = currentRole ? roleNavigation[currentRole] : []
-  const routeView = parseRouteView(location.pathname, currentRole)
-  const visibleView: WorkspaceView = routeView ?? 'dashboard'
-  const activePageTitle = viewLabels[visibleView]
+  const legacyView = deriveLegacyView(location.pathname, currentRole)
+  const visibleView: LegacyView = legacyView ?? 'dashboard'
+  const activePageTitle = legacyViewLabels[visibleView]
 
   const showHero = visibleView === 'dashboard'
   const showAccount = visibleView === 'account'
@@ -350,10 +371,17 @@ function App() {
       }
       return
     }
-    if (!routeView) {
-      navigate(viewPath(currentRole, 'dashboard'), { replace: true })
+    // Top-level role redirect: if the URL prefix doesn't match the current
+    // role, send the user to their dashboard. Routes that do match the role
+    // (including §1.1 placeholders served by <RoutePlaceholder> below) are
+    // handled by <Routes> directly, so we don't redirect on those.
+    const rolePrefix = `/${currentRole}/`
+    const hasRolePrefix =
+      location.pathname === `/${currentRole}` || location.pathname.startsWith(rolePrefix)
+    if (!hasRolePrefix) {
+      navigate(dashboardPath(currentRole), { replace: true })
     }
-  }, [currentRole, location.pathname, routeView, navigate])
+  }, [currentRole, location.pathname, navigate])
 
   const dashboardQuery = useQuery({
     enabled: Boolean(session),
@@ -521,7 +549,7 @@ function App() {
         type: 'success',
         content: `${roleLabels[payload.user.role]} ${payload.user.realName}，欢迎回来。`,
       })
-      navigate(viewPath(payload.user.role, 'dashboard'), { replace: true })
+      navigate(dashboardPath(payload.user.role), { replace: true })
       startTransition(() => {
         resetWorkspaceSelection()
       })
@@ -1140,29 +1168,31 @@ function App() {
       </div>
 
       <nav className="sidebar-nav" aria-label="Web 端功能导航">
-        {navItems.map((item) => (
-          <button
-            key={item.view}
-            className={visibleView === item.view ? 'nav-item active' : 'nav-item'}
-            type="button"
-            onClick={() => {
-              if (currentRole) {
-                navigate(viewPath(currentRole, item.view))
-              }
-              if (isCompactViewport) {
-                setIsMobileNavOpen(false)
-              }
-            }}
-          >
-            <span className="nav-icon" aria-hidden="true">
-              {item.label.slice(0, 1)}
-            </span>
-            <span>
-              <strong>{item.label}</strong>
-              <small>{item.hint}</small>
-            </span>
-          </button>
-        ))}
+        {navItems.map((item) => {
+          const isActive =
+            location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+          return (
+            <button
+              key={item.to}
+              className={isActive ? 'nav-item active' : 'nav-item'}
+              type="button"
+              onClick={() => {
+                navigate(item.to)
+                if (isCompactViewport) {
+                  setIsMobileNavOpen(false)
+                }
+              }}
+            >
+              <span className="nav-icon" aria-hidden="true">
+                {item.label.slice(0, 1)}
+              </span>
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.hint}</small>
+              </span>
+            </button>
+          )
+        })}
       </nav>
 
       <div className="sidebar-footer">
@@ -1261,8 +1291,19 @@ function App() {
           onSubmissionChange={(submissionId) => setSelectedSubmissionId(submissionId || null)}
         />
 
-        <div className="dashboard-layout">
-            {showHero ? (
+        <Routes>
+          {/* Course workspace roots redirect to their overview tab (§1.1). */}
+          <Route path="/student/courses/:courseId" element={<Navigate to="overview" replace />} />
+          <Route path="/teacher/courses/:courseId" element={<Navigate to="overview" replace />} />
+          <Route path="/officer/courses/:courseId" element={<Navigate to="overview" replace />} />
+          {STEP1_PLACEHOLDER_ROUTES.map((path) => (
+            <Route key={path} path={path} element={<RoutePlaceholder route={path} />} />
+          ))}
+          <Route
+            path="*"
+            element={
+              <div className="dashboard-layout">
+                {showHero ? (
               <>
                 <div className="hero-banner">
                   <div>
@@ -2274,7 +2315,10 @@ function App() {
               ) : null}
             </div>
             ) : null}
-          </div>
+              </div>
+            }
+          />
+        </Routes>
       </main>
     </div>
   )
