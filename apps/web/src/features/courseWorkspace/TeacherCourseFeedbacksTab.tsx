@@ -42,30 +42,49 @@ export function TeacherCourseFeedbacksTab() {
           <StatePanel title="暂无反馈" detail="当前课程范围内没有学生作业反馈。" />
         ) : (
           <div className="entity-list">
-            {threads.map((thread) => (
-              <button
-                key={thread.id}
-                type="button"
-                className={
-                  selectedFeedbackId === thread.id ? 'entity-card active' : 'entity-card'
-                }
-                onClick={() => navigate(`/teacher/courses/${course.id}/feedbacks/${thread.id}`)}
-              >
-                <div>
-                  <strong>
-                    {thread.studentName ?? thread.studentId} · {thread.assignmentTitle ?? '作业'}
-                  </strong>
-                  <span>{thread.kind === 'question' ? '问题' : '反馈'}</span>
-                </div>
-                <p>{thread.content}</p>
-                <small>
-                  状态：{thread.responses.length > 0 ? '已回答' : '未回答'}
-                </small>
-                {thread.createdAt ? (
-                  <small>发起：{formatDateTimeForDisplay(thread.createdAt)}</small>
-                ) : null}
-              </button>
-            ))}
+            {threads.map((thread) => {
+              const answered = thread.responses.length > 0
+              const cardClassName = [
+                'entity-card',
+                'feedback-thread-card',
+                answered ? 'feedback-thread-card--answered' : 'feedback-thread-card--pending',
+                selectedFeedbackId === thread.id ? 'active' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')
+              return (
+                <button
+                  key={thread.id}
+                  type="button"
+                  className={cardClassName}
+                  onClick={() => navigate(`/teacher/courses/${course.id}/feedbacks/${thread.id}`)}
+                >
+                  <div>
+                    <strong>
+                      {thread.studentName ?? thread.studentId} · {thread.assignmentTitle ?? '作业'}
+                    </strong>
+                    <span className="feedback-card-tags">
+                      <span className="feedback-card-tag feedback-card-tag--kind">
+                        {thread.kind === 'question' ? '问题' : '反馈'}
+                      </span>
+                      <span
+                        className={
+                          answered
+                            ? 'feedback-card-tag feedback-card-tag--answered'
+                            : 'feedback-card-tag feedback-card-tag--pending'
+                        }
+                      >
+                        {answered ? '已回答' : '未回答'}
+                      </span>
+                    </span>
+                  </div>
+                  <p>{thread.content}</p>
+                  {thread.createdAt ? (
+                    <small>发起：{formatDateTimeForDisplay(thread.createdAt)}</small>
+                  ) : null}
+                </button>
+              )
+            })}
           </div>
         )}
       </aside>

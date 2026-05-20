@@ -997,6 +997,48 @@ a.danger-button {
   background: rgba(15, 23, 42, 0.08);
 }
 
+.feedback-card-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.feedback-card-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.feedback-card-tag--kind {
+  color: var(--nuaa-blue-dark);
+  background: var(--nuaa-blue-soft);
+}
+
+.feedback-card-tag--answered {
+  color: var(--success);
+  background: var(--success-soft);
+}
+
+.feedback-card-tag--pending {
+  color: var(--warning);
+  background: var(--warning-soft);
+}
+
+.feedback-thread-card--pending {
+  border-left: 3px solid var(--warning);
+}
+
+.feedback-thread-card--answered {
+  border-left: 3px solid var(--success);
+}
+
 .user-admin {
   display: grid;
   gap: 16px;
