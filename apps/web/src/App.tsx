@@ -43,7 +43,14 @@ import { dashboardPath } from './routes/paths'
 import { readInitialRuntimeState } from './runtime-state'
 import { extractErrorMessage } from './utils/errors'
 
-const DEFAULT_API_BASE_URL = 'http://localhost:4100/api/v1'
+const DEFAULT_API_BASE_URL = (() => {
+  if (typeof window === 'undefined') return 'http://localhost:4100/api/v1'
+  const origin = window.location.origin
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(origin)) {
+    return 'http://localhost:4100/api/v1'
+  }
+  return `${origin}/api/v1`
+})()
 
 const ROLE_LABELS: Record<UserRole, string> = {
   student: '学生',

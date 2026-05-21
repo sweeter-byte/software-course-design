@@ -1,0 +1,25 @@
+[Unit]
+Description=Course Manage System backend (Fastify)
+After=network.target mysql.service
+Requires=mysql.service
+
+[Service]
+Type=simple
+User=course
+Group=course
+WorkingDirectory=/opt/course-manage-system
+EnvironmentFile=/opt/course-manage-system/.env.local
+ExecStart=/usr/bin/node dist/apps/server/src/index.js
+Restart=on-failure
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/course-manage-system/logs
+
+[Install]
+WantedBy=multi-user.target
