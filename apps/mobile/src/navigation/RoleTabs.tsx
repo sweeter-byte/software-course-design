@@ -1,12 +1,14 @@
 import type { ReactElement } from 'react'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import type { NavigatorScreenParams } from '@react-navigation/native'
 
 import type { UserRole } from '../domain'
+import type { CourseStackParamList } from './CourseStack'
 import { getInitialTabForRole, getRoleTabs, type RoleTabRouteName } from './navigation-model'
 
 export type RoleTabParamList = {
   Dashboard: undefined
-  Courses: undefined
+  Courses: NavigatorScreenParams<CourseStackParamList> | undefined
   Assignments: undefined
   TeacherTasks: undefined
   OfficerUsers: undefined

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -11,8 +11,9 @@ import {
 } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
-import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import { NavigationContainer, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { ApiError, api, type SessionPayload, type UserRole } from './src/api'
@@ -28,8 +29,15 @@ import type {
 } from './src/domain'
 import { AuthStack, type AuthStackParamList } from './src/navigation/AuthStack'
 import { CourseStack, type CourseStackParamList } from './src/navigation/CourseStack'
-import { RoleTabs } from './src/navigation/RoleTabs'
-import { roleLabels } from './src/navigation/navigation-model'
+import { RoleTabs, type RoleTabParamList } from './src/navigation/RoleTabs'
+import { roleLabels, type RoleTabRouteName } from './src/navigation/navigation-model'
+import {
+  buildDashboardActions,
+  buildDashboardMetrics,
+  buildDashboardTasks,
+  buildTeacherTaskQueues,
+  type PendingSubmissionTask,
+} from './src/screens/dashboard/dashboard-model'
 import {
   clearStoredSession,
   loadStoredSession,
@@ -112,6 +120,70 @@ function SummaryBadge(props: { label: string; value: number; accent: string }) {
   )
 }
 
+function DashboardTaskCard(props: {
+  label: string
+  value: number
+  detail: string
+  onPress: () => void
+}) {
+  return (
+    <Pressable style={styles.taskCard} onPress={props.onPress}>
+      <View style={styles.taskCardHead}>
+        <Text style={styles.taskLabel}>{props.label}</Text>
+        <Text style={styles.taskValue}>{props.value}</Text>
+      </View>
+      <Text style={styles.helper}>{props.detail}</Text>
+    </Pressable>
+  )
+}
+
+function QuickActionButton(props: {
+  label: string
+  detail: string
+  onPress: () => void
+}) {
+  return (
+    <Pressable style={styles.actionButton} onPress={props.onPress}>
+      <Text style={styles.actionLabel}>{props.label}</Text>
+      <Text style={styles.actionDetail}>{props.detail}</Text>
+    </Pressable>
+  )
+}
+
+function formatDateTimeBrief(value: string | null | undefined) {
+  if (!value) return '未记录'
+  return value.replace('T', ' ').slice(0, 16)
+}
+
+function navigateRoleTab(
+  navigation: BottomTabNavigationProp<RoleTabParamList>,
+  routeName: RoleTabRouteName,
+) {
+  switch (routeName) {
+    case 'Dashboard':
+      navigation.navigate('Dashboard')
+      break
+    case 'Courses':
+      navigation.navigate('Courses')
+      break
+    case 'Assignments':
+      navigation.navigate('Assignments')
+      break
+    case 'TeacherTasks':
+      navigation.navigate('TeacherTasks')
+      break
+    case 'OfficerUsers':
+      navigation.navigate('OfficerUsers')
+      break
+    case 'OfficerFeedbacks':
+      navigation.navigate('OfficerFeedbacks')
+      break
+    case 'Account':
+      navigation.navigate('Account')
+      break
+  }
+}
+
 function Workspace() {
   const queryClient = useQueryClient()
   const confirmAction = (title: string, message: string, action: () => void) => {
@@ -169,6 +241,7 @@ function Workspace() {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null)
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null)
+  const [teacherQueueTab, setTeacherQueueTab] = useState<'submissions' | 'feedbacks'>('submissions')
   const [courseDraft, setCourseDraft] = useState({
     courseCode: 'SE-5002',
     courseName: '移动端课程互动',
@@ -797,9 +870,120 @@ function Workspace() {
     currentRole === 'teacher'
       ? courses.filter((course) => course.teacherId === session?.user.id)
       : courses
+  const teacherAssignmentQueries = useQueries({
+    queries:
+      currentRole === 'teacher'
+        ? visibleCourses.map((course) => ({
+            queryKey: ['mobile-teacher-assignments', apiBaseUrl, session?.accessToken, course.id],
+            queryFn: async () => {
+              if (!session) return { items: [] as AssignmentItem[], course }
+              const payload = await api.listAssignments(apiBaseUrl, session.accessToken, course.id)
+              return { items: payload.items as AssignmentItem[], course }
+            },
+          }))
+        : [],
+  })
+  const teacherAssignmentContexts = useMemo(
+    () =>
+      teacherAssignmentQueries.flatMap((query) => {
+        if (!query.data) return []
+        return query.data.items.map((assignment) => ({
+          assignment,
+          courseId: query.data.course.id,
+          courseName: query.data.course.courseName,
+        }))
+      }),
+    [teacherAssignmentQueries],
+  )
+  const teacherSubmittableAssignmentContexts = useMemo(
+    () =>
+      teacherAssignmentContexts.filter(({ assignment }) => assignment.status !== 'cancelled'),
+    [teacherAssignmentContexts],
+  )
+  const teacherSubmissionQueries = useQueries({
+    queries:
+      currentRole === 'teacher'
+        ? teacherSubmittableAssignmentContexts.map(({ assignment }) => ({
+            queryKey: ['mobile-teacher-submissions', apiBaseUrl, session?.accessToken, assignment.id],
+            queryFn: async () => {
+              if (!session) return { items: [] as SubmissionItem[], assignmentId: assignment.id }
+              const payload = await api.listSubmissions(apiBaseUrl, session.accessToken, assignment.id)
+              return { items: payload.items as SubmissionItem[], assignmentId: assignment.id }
+            },
+          }))
+        : [],
+  })
+  const teacherFeedbackThreadsQuery = useQuery({
+    enabled: currentRole === 'teacher',
+    queryKey: ['mobile-teacher-feedback-threads', apiBaseUrl, session?.accessToken],
+    queryFn: async () => {
+      if (!session) return { items: [] as FeedbackItem[] }
+      const payload = await api.listFeedbackThreads(apiBaseUrl, session.accessToken, {})
+      return { items: payload.items as FeedbackItem[] }
+    },
+  })
+  const teacherSubmissionsByAssignment = useMemo(() => {
+    const items: Record<string, SubmissionItem[]> = {}
+    teacherSubmissionQueries.forEach((query) => {
+      if (query.data) {
+        items[query.data.assignmentId] = query.data.items
+      }
+    })
+    return items
+  }, [teacherSubmissionQueries])
+  const teacherTaskQueues = useMemo(
+    () =>
+      buildTeacherTaskQueues({
+        assignments: teacherAssignmentContexts,
+        submissionsByAssignment: teacherSubmissionsByAssignment,
+        feedbackThreads: teacherFeedbackThreadsQuery.data?.items ?? [],
+      }),
+    [teacherAssignmentContexts, teacherSubmissionsByAssignment, teacherFeedbackThreadsQuery.data],
+  )
+  const teacherTasksLoading =
+    currentRole === 'teacher' &&
+    (coursesQuery.isLoading ||
+      teacherAssignmentQueries.some((query) => query.isLoading) ||
+      teacherSubmissionQueries.some((query) => query.isLoading) ||
+      teacherFeedbackThreadsQuery.isLoading)
   const selectedCourse = visibleCourses.find((course) => course.id === selectedCourseId) ?? null
-  const selectedAssignment = assignments.find((assignment) => assignment.id === selectedAssignmentId) ?? null
-  const selectedSubmission = submissions.find((submission) => submission.id === selectedSubmissionId) ?? null
+  const selectedAssignment =
+    assignments.find((assignment) => assignment.id === selectedAssignmentId) ??
+    teacherAssignmentContexts.find(({ assignment }) => assignment.id === selectedAssignmentId)?.assignment ??
+    null
+  const selectedSubmission =
+    submissions.find((submission) => submission.id === selectedSubmissionId) ??
+    teacherTaskQueues.pendingSubmissions.find(({ submission }) => submission.id === selectedSubmissionId)
+      ?.submission ??
+    null
+
+  const openSubmissionTask = (
+    navigation: BottomTabNavigationProp<RoleTabParamList>,
+    task: PendingSubmissionTask,
+  ) => {
+    setSelectedCourseId(task.courseId)
+    setSelectedAssignmentId(task.assignment.id)
+    setSelectedSubmissionId(task.submission.id)
+    navigation.navigate('Courses', {
+      screen: 'SubmissionDetail',
+      params: { submissionId: task.submission.id },
+    })
+  }
+
+  const openFeedbackTask = (
+    navigation: BottomTabNavigationProp<RoleTabParamList>,
+    thread: FeedbackItem,
+  ) => {
+    if (thread.courseId) {
+      setSelectedCourseId(thread.courseId)
+    }
+    setSelectedAssignmentId(thread.assignmentId)
+    setSelectedSubmissionId(thread.submissionId)
+    navigation.navigate('Courses', {
+      screen: 'FeedbackThread',
+      params: { feedbackId: thread.id },
+    })
+  }
 
   function ScreenScroll({ children }: { children: ReactNode }) {
     return (
@@ -1049,7 +1233,16 @@ function Workspace() {
   }
 
   function DashboardScreen() {
+    const navigation = useNavigation<BottomTabNavigationProp<RoleTabParamList, 'Dashboard'>>()
+
     if (!session) return null
+
+    const summary = dashboardQuery.data?.summary ?? {}
+    const metrics = buildDashboardMetrics(session.user.role, summary)
+    const tasks = buildDashboardTasks(session.user.role, summary)
+    const actions = buildDashboardActions(session.user.role)
+    const teacherPreviewSubmissions = teacherTaskQueues.pendingSubmissions.slice(0, 2)
+    const teacherPreviewFeedbacks = teacherTaskQueues.pendingFeedbacks.slice(0, 2)
 
     return (
       <RoleScreen
@@ -1057,18 +1250,96 @@ function Workspace() {
         subtitle={`${session.user.realName} · ${roleLabels[session.user.role]} · ${session.user.phone}`}
       >
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>今日概览</Text>
+          <Text style={styles.sectionTitle}>角色概览</Text>
           <View style={styles.summaryGrid}>
-            {Object.entries(dashboardQuery.data?.summary ?? {}).map(([label, value], index) => (
+            {metrics.map((metric, index) => (
               <SummaryBadge
-                key={label}
-                label={label}
-                value={value}
+                key={metric.key}
+                label={metric.label}
+                value={metric.value}
                 accent={['#005bac', '#159447', '#d97706', '#dc2626'][index % 4]}
               />
             ))}
           </View>
           {dashboardQuery.isLoading ? <ActivityIndicator color="#005bac" /> : null}
+          {!dashboardQuery.isLoading && metrics.every((metric) => metric.value === 0) ? (
+            <Text style={styles.helper}>暂无概览数据，请稍后刷新或确认网络连接。</Text>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>优先任务</Text>
+          <View style={styles.taskList}>
+            {tasks.map((task) => (
+              <DashboardTaskCard
+                key={task.label}
+                label={task.label}
+                value={task.value}
+                detail={task.detail}
+                onPress={() => navigateRoleTab(navigation, task.target)}
+              />
+            ))}
+          </View>
+        </View>
+
+        {session.user.role === 'teacher' ? (
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>继续处理</Text>
+            {teacherTasksLoading ? <ActivityIndicator color="#005bac" /> : null}
+            {!teacherTasksLoading &&
+            teacherPreviewSubmissions.length === 0 &&
+            teacherPreviewFeedbacks.length === 0 ? (
+              <Text style={styles.helper}>暂无待批改提交或未回答反馈。</Text>
+            ) : null}
+            <View style={styles.listBlock}>
+              {teacherPreviewSubmissions.map((task) => (
+                <Pressable
+                  key={task.submission.id}
+                  style={styles.listItem}
+                  onPress={() => openSubmissionTask(navigation, task)}
+                >
+                  <Text style={styles.threadTag}>待批改提交</Text>
+                  <Text style={styles.listItemTitle}>
+                    {task.submission.studentName ?? task.submission.studentId} · {task.assignment.title}
+                  </Text>
+                  <Text style={styles.listItemCopy}>{task.submission.content}</Text>
+                  <Text style={styles.helper}>
+                    {task.courseName} · {formatDateTimeBrief(task.submission.submittedAt)}
+                  </Text>
+                </Pressable>
+              ))}
+              {teacherPreviewFeedbacks.map((thread) => (
+                <Pressable
+                  key={thread.id}
+                  style={styles.listItem}
+                  onPress={() => openFeedbackTask(navigation, thread)}
+                >
+                  <Text style={styles.threadTag}>未回答反馈</Text>
+                  <Text style={styles.listItemTitle}>
+                    {thread.studentName ?? thread.studentId} · {thread.assignmentTitle ?? '作业'}
+                  </Text>
+                  <Text style={styles.listItemCopy}>{thread.content}</Text>
+                  <Text style={styles.helper}>
+                    {thread.courseName ?? '课程'} · {formatDateTimeBrief(thread.createdAt)}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>快捷入口</Text>
+          <View style={styles.actionGrid}>
+            {actions.map((action) => (
+              <QuickActionButton
+                key={action.label}
+                label={action.label}
+                detail={action.detail}
+                onPress={() => navigateRoleTab(navigation, action.target)}
+              />
+            ))}
+          </View>
         </View>
       </RoleScreen>
     )
@@ -1698,7 +1969,9 @@ function Workspace() {
 
   function FeedbackThreadScreen() {
     const route = useRoute<RouteProp<CourseStackParamList, 'FeedbackThread'>>()
-    const feedback = feedbacks.find((item) => item.id === route.params?.feedbackId)
+    const feedback =
+      feedbacks.find((item) => item.id === route.params?.feedbackId) ??
+      teacherTaskQueues.pendingFeedbacks.find((item) => item.id === route.params?.feedbackId)
 
     return (
       <RoleScreen title="反馈详情" subtitle={feedback?.assignmentTitle ?? '反馈线程'}>
@@ -1753,11 +2026,75 @@ function Workspace() {
   }
 
   function TeacherTasksScreen() {
+    const navigation = useNavigation<BottomTabNavigationProp<RoleTabParamList, 'TeacherTasks'>>()
+    const showSubmissions = teacherQueueTab === 'submissions'
+
     return (
-      <RoleScreen title="教学任务" subtitle="待批改提交和未回答反馈将在工作台阶段展开。">
+      <RoleScreen title="教学任务" subtitle="跨课程汇总待批改提交和未回答作业反馈。">
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>任务入口</Text>
-          <Text style={styles.helper}>底部任务栏已为教师保留独立教学任务入口。</Text>
+          <Text style={styles.sectionTitle}>任务队列</Text>
+          <View style={styles.taskSummaryGrid}>
+            <Pressable
+              style={[styles.taskSummaryTab, showSubmissions ? styles.taskSummaryTabActive : null]}
+              onPress={() => setTeacherQueueTab('submissions')}
+            >
+              <Text style={styles.taskSummaryLabel}>待批改提交</Text>
+              <Text style={styles.taskSummaryValue}>{teacherTaskQueues.pendingSubmissions.length}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.taskSummaryTab, !showSubmissions ? styles.taskSummaryTabActive : null]}
+              onPress={() => setTeacherQueueTab('feedbacks')}
+            >
+              <Text style={styles.taskSummaryLabel}>未回答反馈</Text>
+              <Text style={styles.taskSummaryValue}>{teacherTaskQueues.pendingFeedbacks.length}</Text>
+            </Pressable>
+          </View>
+          {teacherTasksLoading ? <ActivityIndicator color="#005bac" /> : null}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{showSubmissions ? '待批改提交' : '未回答作业反馈'}</Text>
+          {showSubmissions ? (
+            <View style={styles.listBlock}>
+              {teacherTaskQueues.pendingSubmissions.map((task) => (
+                <Pressable
+                  key={task.submission.id}
+                  style={styles.listItem}
+                  onPress={() => openSubmissionTask(navigation, task)}
+                >
+                  <Text style={styles.listItemTitle}>
+                    {task.submission.studentName ?? task.submission.studentId} · {task.assignment.title}
+                  </Text>
+                  <Text style={styles.listItemCopy}>{task.submission.content}</Text>
+                  <Text style={styles.helper}>课程：{task.courseName}</Text>
+                  <Text style={styles.helper}>提交时间：{formatDateTimeBrief(task.submission.submittedAt)}</Text>
+                </Pressable>
+              ))}
+              {!teacherTasksLoading && teacherTaskQueues.pendingSubmissions.length === 0 ? (
+                <Text style={styles.helper}>暂无待批改提交，所有提交都已批改完成。</Text>
+              ) : null}
+            </View>
+          ) : (
+            <View style={styles.listBlock}>
+              {teacherTaskQueues.pendingFeedbacks.map((thread) => (
+                <Pressable
+                  key={thread.id}
+                  style={styles.listItem}
+                  onPress={() => openFeedbackTask(navigation, thread)}
+                >
+                  <Text style={styles.listItemTitle}>
+                    {thread.studentName ?? thread.studentId} · {thread.assignmentTitle ?? '作业'}
+                  </Text>
+                  <Text style={styles.listItemCopy}>{thread.content}</Text>
+                  {thread.courseName ? <Text style={styles.helper}>课程：{thread.courseName}</Text> : null}
+                  <Text style={styles.helper}>发起时间：{formatDateTimeBrief(thread.createdAt)}</Text>
+                </Pressable>
+              ))}
+              {!teacherTasksLoading && teacherTaskQueues.pendingFeedbacks.length === 0 ? (
+                <Text style={styles.helper}>暂无待回答反馈，所有学生反馈都已回应。</Text>
+              ) : null}
+            </View>
+          )}
         </View>
       </RoleScreen>
     )
@@ -1960,9 +2297,14 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
   },
   summaryCard: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    minHeight: 96,
     borderLeftWidth: 5,
     borderRadius: 8,
     borderWidth: 1,
@@ -1979,6 +2321,82 @@ const styles = StyleSheet.create({
   summaryValue: {
     color: '#005bac',
     fontSize: 24,
+    fontWeight: '800',
+  },
+  taskList: {
+    gap: 10,
+  },
+  taskCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d9e2ef',
+    backgroundColor: '#f8fbff',
+    padding: 14,
+    gap: 8,
+  },
+  taskCardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  taskLabel: {
+    flex: 1,
+    color: '#111827',
+    fontWeight: '800',
+  },
+  taskValue: {
+    color: '#005bac',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  actionGrid: {
+    gap: 10,
+  },
+  actionButton: {
+    minHeight: 58,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 91, 172, 0.28)',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  actionLabel: {
+    color: '#004080',
+    fontWeight: '800',
+  },
+  actionDetail: {
+    color: '#6b7280',
+    lineHeight: 18,
+    fontSize: 12,
+  },
+  taskSummaryGrid: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  taskSummaryTab: {
+    flex: 1,
+    minHeight: 76,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#d9e2ef',
+    backgroundColor: '#f8fbff',
+    padding: 12,
+    gap: 8,
+  },
+  taskSummaryTabActive: {
+    borderColor: '#005bac',
+    backgroundColor: '#eaf3ff',
+  },
+  taskSummaryLabel: {
+    color: '#4b5563',
+    fontWeight: '800',
+  },
+  taskSummaryValue: {
+    color: '#005bac',
+    fontSize: 26,
     fontWeight: '800',
   },
   chipRow: {
