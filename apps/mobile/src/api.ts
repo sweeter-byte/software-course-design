@@ -53,6 +53,27 @@ export class ApiError extends Error {
   }
 }
 
+export function extractErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    const details = error.details
+      ?.map((detail) => {
+        const path = detail.path.length ? `${detail.path.join('.')}: ` : ''
+        return `${path}${detail.message}`
+      })
+      .join('；')
+    const code = error.code ? ` / ${error.code}` : ''
+    return details
+      ? `${error.message}${code} (${error.statusCode})：${details}`
+      : `${error.message}${code} (${error.statusCode})`
+  }
+
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return '请求失败'
+}
+
 async function requestJson<T>(baseUrl: string, path: string, options: RequestOptions = {}): Promise<T> {
   const hasBody = options.body !== undefined
   const response = await fetch(`${baseUrl}${path}`, {

@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
+import { createBottomTabNavigator, type BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import type { NavigatorScreenParams } from '@react-navigation/native'
 
 import type { UserRole } from '../domain'
@@ -14,6 +14,35 @@ export type RoleTabParamList = {
   OfficerUsers: undefined
   OfficerFeedbacks: undefined
   Account: undefined
+}
+
+export function navigateRoleTab(
+  navigation: BottomTabNavigationProp<RoleTabParamList>,
+  routeName: RoleTabRouteName,
+) {
+  switch (routeName) {
+    case 'Dashboard':
+      navigation.navigate('Dashboard')
+      return
+    case 'Courses':
+      navigation.navigate('Courses')
+      return
+    case 'Assignments':
+      navigation.navigate('Assignments')
+      return
+    case 'TeacherTasks':
+      navigation.navigate('TeacherTasks')
+      return
+    case 'OfficerUsers':
+      navigation.navigate('OfficerUsers')
+      return
+    case 'OfficerFeedbacks':
+      navigation.navigate('OfficerFeedbacks')
+      return
+    case 'Account':
+      navigation.navigate('Account')
+      return
+  }
 }
 
 type RoleTabsProps = {
