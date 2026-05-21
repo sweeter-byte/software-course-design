@@ -9,7 +9,7 @@ export type SessionUser = {
   studentNo?: string | null
 }
 
-export type CourseStatus = 'not_started' | 'active' | 'finished' | 'cancelled' | string
+export type CourseStatus = 'not_started' | 'active' | 'completed' | 'suspended' | string
 
 export type CourseItem = {
   id: string

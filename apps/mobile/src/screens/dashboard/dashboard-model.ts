@@ -46,9 +46,14 @@ const summaryLabels: Record<string, string> = {
   enrolledCourses: '已加入课程',
   pendingAssignments: '待提交作业',
   gradedSubmissions: '已批改提交',
-  totalCoursesForTeacher: '当前课程数',
   publishedAssignments: '已发布作业',
   pendingGrades: '待批改提交',
+}
+
+const roleSummaryLabelOverrides: Partial<Record<UserRole, Record<string, string>>> = {
+  teacher: {
+    totalCourses: '当前课程数',
+  },
 }
 
 const metricKeysByRole: Record<UserRole, string[]> = {
@@ -93,14 +98,18 @@ const actionsByRole: Record<UserRole, DashboardAction[]> = {
   ],
 }
 
-export function getDashboardSummaryLabel(key: string) {
+export function getDashboardSummaryLabel(key: string, role?: UserRole) {
+  if (role) {
+    const override = roleSummaryLabelOverrides[role]?.[key]
+    if (override) return override
+  }
   return summaryLabels[key] ?? key
 }
 
 export function buildDashboardMetrics(role: UserRole, summary: DashboardSummary): DashboardMetric[] {
   return metricKeysByRole[role].map((key) => ({
     key,
-    label: getDashboardSummaryLabel(key),
+    label: getDashboardSummaryLabel(key, role),
     value: summary[key] ?? 0,
   }))
 }

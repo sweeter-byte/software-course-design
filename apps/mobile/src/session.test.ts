@@ -6,7 +6,12 @@ vi.mock('expo-secure-store', () => ({
   deleteItemAsync: vi.fn(),
 }))
 
-import { clearStoredSession, loadStoredSession, persistSession } from './session'
+import {
+  clearStoredSession,
+  loadStoredSession,
+  persistSession,
+  refreshStoredSession,
+} from './session'
 import type { SessionPayload } from './api'
 
 const session: SessionPayload = {
@@ -55,6 +60,42 @@ describe('mobile session persistence', () => {
     const storage = createStorage(JSON.stringify(session))
 
     await clearStoredSession(storage)
+
+    expect(storage.deleteItemAsync).toHaveBeenCalledWith('cms_session')
+    await expect(loadStoredSession(storage)).resolves.toBeNull()
+  })
+
+  it('refreshes stored user data before restoring a session', async () => {
+    const storage = createStorage(JSON.stringify(session))
+    const loadCurrentUser = vi.fn(async () => ({
+      user: {
+        ...session.user,
+        username: 'new-name',
+        realName: '学生一（已更新）',
+      },
+    }))
+
+    await expect(refreshStoredSession(storage, loadCurrentUser)).resolves.toEqual({
+      ...session,
+      user: {
+        ...session.user,
+        username: 'new-name',
+        realName: '学生一（已更新）',
+      },
+    })
+    expect(loadCurrentUser).toHaveBeenCalledWith('access-token')
+    await expect(loadStoredSession(storage)).resolves.toMatchObject({
+      user: { username: 'new-name', realName: '学生一（已更新）' },
+    })
+  })
+
+  it('clears stored credentials when session refresh is rejected', async () => {
+    const storage = createStorage(JSON.stringify(session))
+    const loadCurrentUser = vi.fn(async () => {
+      throw new Error('account_disabled')
+    })
+
+    await expect(refreshStoredSession(storage, loadCurrentUser)).resolves.toBeNull()
 
     expect(storage.deleteItemAsync).toHaveBeenCalledWith('cms_session')
     await expect(loadStoredSession(storage)).resolves.toBeNull()

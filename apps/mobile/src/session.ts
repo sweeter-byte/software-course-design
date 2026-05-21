@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store'
 
 import type { SessionPayload, UserRole } from './api'
+import type { SessionUser } from './domain'
 
 export const SESSION_STORAGE_KEY = 'cms_session'
 
@@ -91,5 +92,26 @@ export async function clearStoredSession(storage: SessionStorage) {
     await storage.deleteItemAsync(SESSION_STORAGE_KEY)
   } catch {
     // Failed cleanup should not block memory-state logout.
+  }
+}
+
+export async function refreshStoredSession(
+  storage: SessionStorage,
+  loadCurrentUser: (accessToken: string) => Promise<{ user: SessionUser }>,
+): Promise<SessionPayload | null> {
+  const storedSession = await loadStoredSession(storage)
+  if (!storedSession) return null
+
+  try {
+    const payload = await loadCurrentUser(storedSession.accessToken)
+    const refreshedSession: SessionPayload = {
+      ...storedSession,
+      user: payload.user,
+    }
+    await persistSession(storage, refreshedSession)
+    return refreshedSession
+  } catch {
+    await clearStoredSession(storage)
+    return null
   }
 }

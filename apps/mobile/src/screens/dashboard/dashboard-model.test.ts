@@ -72,7 +72,7 @@ describe('mobile dashboard model', () => {
         openFeedbacks: 9,
         courseFeedbacks: 10,
       }).map((item) => item.label),
-    ).toEqual(['课程总数', '已发布作业', '待批改提交', '作业互动反馈数', '课程反馈数'])
+    ).toEqual(['当前课程数', '已发布作业', '待批改提交', '作业互动反馈数', '课程反馈数'])
   })
 
   it('builds role-specific task prompts and quick actions for the first dashboard screen', () => {

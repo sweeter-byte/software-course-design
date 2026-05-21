@@ -17,6 +17,7 @@ export type RoleTabItem = {
 export type CourseStackRouteName =
   | 'CourseList'
   | 'CourseWorkspace'
+  | 'CourseCreate'
   | 'AssignmentDetail'
   | 'SubmissionDetail'
   | 'FeedbackThread'
@@ -53,6 +54,7 @@ const roleTabs: Record<UserRole, RoleTabItem[]> = {
 export const courseStackRoutes: CourseStackRouteName[] = [
   'CourseList',
   'CourseWorkspace',
+  'CourseCreate',
   'AssignmentDetail',
   'SubmissionDetail',
   'FeedbackThread',

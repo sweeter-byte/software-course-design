@@ -43,6 +43,7 @@ describe('mobile navigation model', () => {
     expect(courseStackRoutes).toEqual([
       'CourseList',
       'CourseWorkspace',
+      'CourseCreate',
       'AssignmentDetail',
       'SubmissionDetail',
       'FeedbackThread',
