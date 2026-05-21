@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import {
   ActivityIndicator,
   Alert,
@@ -12,8 +12,12 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { NavigationContainer, useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { ApiError, api, type SessionPayload, type UserRole } from './src/api'
+import { NoticeBanner, type NoticeState, type NoticeType } from './src/components/feedback/NoticeBanner'
+import { RoleHeader } from './src/components/layout/RoleHeader'
 import { createDefaultAssignmentDates } from './src/demo-defaults'
 import type {
   AssignmentItem,
@@ -22,15 +26,19 @@ import type {
   FeedbackItem,
   SubmissionItem,
 } from './src/domain'
+import { AuthStack, type AuthStackParamList } from './src/navigation/AuthStack'
+import { CourseStack, type CourseStackParamList } from './src/navigation/CourseStack'
+import { RoleTabs } from './src/navigation/RoleTabs'
+import { roleLabels } from './src/navigation/navigation-model'
+import {
+  clearStoredSession,
+  loadStoredSession,
+  persistSession,
+  secureSessionStorage,
+} from './src/session'
 
 const queryClient = new QueryClient()
 const DEFAULT_API_BASE_URL = 'http://localhost:4100/api/v1'
-
-const roleLabels: Record<UserRole, string> = {
-  student: '学生',
-  teacher: '教师',
-  officer: '教务员',
-}
 
 const courseFeedbackDimensionLabels: Record<CourseFeedbackItem['dimension'], string> = {
   content: '课程内容',
@@ -113,9 +121,15 @@ function Workspace() {
     ])
   }
   const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_BASE_URL)
-  const [notice, setNotice] = useState('输入可访问后端的地址。Android 模拟器可改为 http://10.0.2.2:4100/api/v1')
+  const [notice, setNoticeState] = useState<NoticeState | null>({
+    type: 'info',
+    message: '输入可访问后端的地址。Android 模拟器可改为 http://10.0.2.2:4100/api/v1',
+  })
+  const setNotice = (message: string, type: NoticeType = 'info') => {
+    setNoticeState({ message, type })
+  }
   const [session, setSession] = useState<SessionPayload | null>(null)
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'reset'>('login')
+  const [isHydratingSession, setIsHydratingSession] = useState(true)
   const [loginForm, setLoginForm] = useState({ phone: '', password: '' })
   const [registerForm, setRegisterForm] = useState({
     phone: '',
@@ -190,6 +204,51 @@ function Workspace() {
     content: '移动端查看课程安排很方便，希望增加更多案例。',
   })
 
+  const applySessionPayload = (payload: SessionPayload) => {
+    setSession(payload)
+    setProfileDraft((current) => ({
+      ...current,
+      username: payload.user.username,
+      realName: payload.user.realName,
+    }))
+    setPhoneDraft((current) => ({
+      ...current,
+      oldPhone: payload.user.phone,
+    }))
+  }
+
+  const clearSessionState = (message: string, type: NoticeType = 'info') => {
+    queryClient.clear()
+    setSession(null)
+    setSelectedCourseId(null)
+    setSelectedAssignmentId(null)
+    setSelectedSubmissionId(null)
+    void clearStoredSession(secureSessionStorage)
+    setNotice(message, type)
+  }
+
+  useEffect(() => {
+    let mounted = true
+
+    loadStoredSession(secureSessionStorage)
+      .then((storedSession) => {
+        if (!mounted) return
+        if (storedSession) {
+          applySessionPayload(storedSession)
+          setNotice(`已恢复 ${roleLabels[storedSession.user.role]} ${storedSession.user.realName} 的移动端会话。`)
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setIsHydratingSession(false)
+        }
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   const dashboardQuery = useQuery({
     enabled: Boolean(session),
     queryKey: ['mobile-dashboard', apiBaseUrl, session?.accessToken, session?.user.role],
@@ -252,19 +311,11 @@ function Workspace() {
   const loginMutation = useMutation({
     mutationFn: async () => api.login(apiBaseUrl, loginForm.phone, loginForm.password),
     onSuccess: (payload) => {
-      setSession(payload)
-      setProfileDraft((current) => ({
-        ...current,
-        username: payload.user.username,
-        realName: payload.user.realName,
-      }))
-      setPhoneDraft((current) => ({
-        ...current,
-        oldPhone: payload.user.phone,
-      }))
-      setNotice(`${roleLabels[payload.user.role]} ${payload.user.realName} 已登录移动端。`)
+      applySessionPayload(payload)
+      void persistSession(secureSessionStorage, payload)
+      setNotice(`${roleLabels[payload.user.role]} ${payload.user.realName} 已登录移动端。`, 'success')
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const codeMutation = useMutation({
@@ -280,7 +331,7 @@ function Workspace() {
         setNotice('验证码已发送，请注意查收。')
       }
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const resetCodeMutation = useMutation({
@@ -292,33 +343,31 @@ function Workspace() {
       }))
       setNotice(payload.previewCode ? `重置验证码已回填：${payload.previewCode}` : '重置验证码已发送。')
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const resetPasswordMutation = useMutation({
     mutationFn: async () => api.resetPassword(apiBaseUrl, resetForm),
     onSuccess: () => {
       setLoginForm({ phone: resetForm.phone, password: resetForm.newPassword })
-      setAuthMode('login')
       setResetForm({
         phone: '',
         verificationCode: '',
         newPassword: '',
         confirmPassword: '',
       })
-      setNotice('密码已重置，可直接登录。')
+      setNotice('密码已重置，可直接登录。', 'success')
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const registerMutation = useMutation({
     mutationFn: async () => api.registerStudent(apiBaseUrl, registerForm),
     onSuccess: () => {
-      setAuthMode('login')
-      setNotice('注册成功，请返回登录。')
+      setNotice('注册成功，请返回登录。', 'success')
       setLoginForm({ phone: registerForm.phone, password: registerForm.password })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const updateProfileMutation = useMutation({
@@ -336,21 +385,22 @@ function Workspace() {
     },
     onSuccess: (payload) => {
       if (!payload) return
-      setSession((current) =>
-        current
-          ? {
-              ...current,
-              user: {
-                ...current.user,
-                username: String(payload.user.username),
-                realName: String(payload.user.realName),
-              },
-            }
-          : current,
-      )
-      setNotice('资料已更新。')
+      setSession((current) => {
+        if (!current) return current
+        const nextSession = {
+          ...current,
+          user: {
+            ...current.user,
+            username: String(payload.user.username),
+            realName: String(payload.user.realName),
+          },
+        }
+        void persistSession(secureSessionStorage, nextSession)
+        return nextSession
+      })
+      setNotice('资料已更新。', 'success')
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const changePasswordMutation = useMutation({
@@ -364,9 +414,9 @@ function Workspace() {
         newPassword: '',
         confirmPassword: '',
       })
-      setNotice('密码已修改。')
+      clearSessionState('密码已修改，请使用新密码重新登录。', 'success')
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const logoutMutation = useMutation({
@@ -375,10 +425,9 @@ function Workspace() {
       return api.logout(apiBaseUrl, session.accessToken)
     },
     onSuccess: () => {
-      setSession(null)
-      setNotice('已退出当前会话。')
+      clearSessionState('已退出当前会话。')
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const phoneCodeMutation = useMutation({
@@ -399,7 +448,7 @@ function Workspace() {
           : `${target === 'old' ? '旧手机号' : '新手机号'}验证码已发送。`,
       )
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const changePhoneMutation = useMutation({
@@ -410,26 +459,15 @@ function Workspace() {
     onSuccess: (payload) => {
       if (!payload) return
       const nextPhone = String(payload.user.phone)
-      setSession((current) =>
-        current
-          ? {
-              ...current,
-              user: {
-                ...current.user,
-                phone: nextPhone,
-              },
-            }
-          : current,
-      )
       setPhoneDraft({
         oldPhone: nextPhone,
         oldVerificationCode: '',
         newPhone: '',
         newVerificationCode: '',
       })
-      setNotice('手机号已修改。')
+      clearSessionState('手机号已修改，请使用新手机号重新登录。', 'success')
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const cancelAccountMutation = useMutation({
@@ -438,10 +476,9 @@ function Workspace() {
       return api.cancelAccount(apiBaseUrl, session.accessToken)
     },
     onSuccess: () => {
-      setSession(null)
-      setNotice('账号已注销。')
+      clearSessionState('账号已注销，后续需重新注册。')
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const createCourseMutation = useMutation({
@@ -467,7 +504,7 @@ function Workspace() {
       queryClient.invalidateQueries({ queryKey: ['mobile-courses'] })
       queryClient.invalidateQueries({ queryKey: ['mobile-dashboard'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const updateCourseMutation = useMutation({
@@ -482,7 +519,7 @@ function Workspace() {
       setNotice('课程已更新。')
       queryClient.invalidateQueries({ queryKey: ['mobile-courses'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const deleteCourseMutation = useMutation({
@@ -498,7 +535,7 @@ function Workspace() {
       queryClient.invalidateQueries({ queryKey: ['mobile-courses'] })
       queryClient.invalidateQueries({ queryKey: ['mobile-dashboard'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const enrollMutation = useMutation({
@@ -537,7 +574,7 @@ function Workspace() {
       setNotice('作业已发布。')
       queryClient.invalidateQueries({ queryKey: ['mobile-assignments'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const updateAssignmentMutation = useMutation({
@@ -549,7 +586,7 @@ function Workspace() {
       setNotice('作业已更新。')
       queryClient.invalidateQueries({ queryKey: ['mobile-assignments'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const cancelAssignmentMutation = useMutation({
@@ -567,7 +604,7 @@ function Workspace() {
       queryClient.invalidateQueries({ queryKey: ['mobile-assignments'] })
       queryClient.invalidateQueries({ queryKey: ['mobile-submissions'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const createSubmissionMutation = useMutation({
@@ -582,7 +619,7 @@ function Workspace() {
       queryClient.invalidateQueries({ queryKey: ['mobile-assignments'] })
       queryClient.invalidateQueries({ queryKey: ['mobile-dashboard'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const getSubmissionMutation = useMutation({
@@ -596,7 +633,7 @@ function Workspace() {
       setSubmissionContent(String(submission.content))
       setNotice(`提交状态：${String(submission.status)}，分数：${submission.score ?? '未批改'}`)
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const updateSubmissionMutation = useMutation({
@@ -608,7 +645,7 @@ function Workspace() {
       setNotice('答案已修改。')
       queryClient.invalidateQueries({ queryKey: ['mobile-submissions'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const gradeMutation = useMutation({
@@ -627,7 +664,7 @@ function Workspace() {
       queryClient.invalidateQueries({ queryKey: ['mobile-submissions'] })
       queryClient.invalidateQueries({ queryKey: ['mobile-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const feedbackMutation = useMutation({
@@ -645,7 +682,7 @@ function Workspace() {
       setNotice('反馈已发布。')
       queryClient.invalidateQueries({ queryKey: ['mobile-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const responseMutation = useMutation({
@@ -657,7 +694,7 @@ function Workspace() {
       setNotice('回复已发送。')
       queryClient.invalidateQueries({ queryKey: ['mobile-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const updateFeedbackMutation = useMutation({
@@ -675,7 +712,7 @@ function Workspace() {
       setNotice('反馈已修改。')
       queryClient.invalidateQueries({ queryKey: ['mobile-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const deleteFeedbackMutation = useMutation({
@@ -687,7 +724,7 @@ function Workspace() {
       setNotice('反馈已删除。')
       queryClient.invalidateQueries({ queryKey: ['mobile-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const updateResponseMutation = useMutation({
@@ -699,7 +736,7 @@ function Workspace() {
       setNotice('回复已修改。')
       queryClient.invalidateQueries({ queryKey: ['mobile-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const deleteResponseMutation = useMutation({
@@ -711,7 +748,7 @@ function Workspace() {
       setNotice('回复已删除。')
       queryClient.invalidateQueries({ queryKey: ['mobile-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const createCourseFeedbackMutation = useMutation({
@@ -723,7 +760,7 @@ function Workspace() {
       setNotice('课程反馈已提交。')
       queryClient.invalidateQueries({ queryKey: ['mobile-course-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const updateCourseFeedbackMutation = useMutation({
@@ -735,7 +772,7 @@ function Workspace() {
       setNotice('课程反馈已修改。')
       queryClient.invalidateQueries({ queryKey: ['mobile-course-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const deleteCourseFeedbackMutation = useMutation({
@@ -747,7 +784,7 @@ function Workspace() {
       setNotice('课程反馈已删除。')
       queryClient.invalidateQueries({ queryKey: ['mobile-course-feedbacks'] })
     },
-    onError: (error) => setNotice(extractErrorMessage(error)),
+    onError: (error) => setNotice(extractErrorMessage(error), 'error'),
   })
 
   const courses = (coursesQuery.data?.items ?? []) as CourseItem[]
@@ -762,10 +799,27 @@ function Workspace() {
       : courses
   const selectedCourse = visibleCourses.find((course) => course.id === selectedCourseId) ?? null
   const selectedAssignment = assignments.find((assignment) => assignment.id === selectedAssignmentId) ?? null
+  const selectedSubmission = submissions.find((submission) => submission.id === selectedSubmissionId) ?? null
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" />
+  function ScreenScroll({ children }: { children: ReactNode }) {
+    return (
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <NoticeBanner notice={notice} />
+        {children}
+      </ScrollView>
+    )
+  }
+
+  function AuthScaffold({
+    title,
+    helper,
+    children,
+  }: {
+    title: string
+    helper: string
+    children: ReactNode
+  }) {
+    return (
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.hero}>
           <View style={styles.heroBrandRow}>
@@ -778,185 +832,253 @@ function Workspace() {
             </View>
           </View>
           <Text style={styles.heroCopy}>
-            不是网页压缩版，而是围绕“当前课、当前作业、当前线程”的移动端业务视图。
+            不是网页压缩版，而是围绕当前角色任务栏组织移动端业务视图。
           </Text>
         </View>
 
+        <NoticeBanner notice={notice} />
+
         <View style={styles.card}>
-          <Text style={styles.notice}>{notice}</Text>
           <Field label="API Base URL" value={apiBaseUrl} onChangeText={setApiBaseUrl} />
         </View>
 
-        {!session ? (
-          <View style={styles.card}>
-            <View style={styles.authHeader}>
-              <Text style={styles.sectionTitle}>
-                {authMode === 'login' ? '账号登录' : authMode === 'register' ? '学生注册' : '找回密码'}
-              </Text>
-              <Text style={styles.helper}>
-                {authMode === 'login'
-                  ? '使用 Web 端同一账号体系，移动端刷新后可同步课程、作业和反馈数据。'
-                  : authMode === 'register'
-                    ? '学生完成手机号验证后即可使用移动端课程互动功能。'
-                    : '通过手机号验证码重置密码，完成后返回登录页。'}
-              </Text>
-            </View>
-
-            {authMode === 'login' ? (
-              <>
-                <Field
-                  label="手机号"
-                  value={loginForm.phone}
-                  onChangeText={(value) => setLoginForm((current) => ({ ...current, phone: value }))}
-                />
-                <Field
-                  label="密码"
-                  value={loginForm.password}
-                  secureTextEntry
-                  onChangeText={(value) => setLoginForm((current) => ({ ...current, password: value }))}
-                />
-                <Pressable style={styles.primaryButton} onPress={() => loginMutation.mutate()}>
-                  {loginMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>登录</Text>}
-                </Pressable>
-                <Text style={styles.helper}>教师：13900139000 / Teacher123!，教务员：13700137000 / Officer123!</Text>
-                <View style={styles.authEntryRow}>
-                  <Pressable style={styles.linkButton} onPress={() => setAuthMode('reset')}>
-                    <Text style={styles.linkButtonText}>忘记密码？</Text>
-                  </Pressable>
-                  <Text style={styles.helper}>还没有学生账号？</Text>
-                  <Pressable style={styles.linkButton} onPress={() => setAuthMode('register')}>
-                    <Text style={styles.linkButtonText}>学生注册</Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : authMode === 'reset' ? (
-              <>
-                <Field
-                  label="手机号"
-                  value={resetForm.phone}
-                  onChangeText={(value) => setResetForm((current) => ({ ...current, phone: value }))}
-                />
-                <Field
-                  label="验证码"
-                  value={resetForm.verificationCode}
-                  onChangeText={(value) =>
-                    setResetForm((current) => ({ ...current, verificationCode: value }))
-                  }
-                />
-                <Field
-                  label="新密码"
-                  value={resetForm.newPassword}
-                  secureTextEntry
-                  onChangeText={(value) =>
-                    setResetForm((current) => ({ ...current, newPassword: value }))
-                  }
-                />
-                <Field
-                  label="确认新密码"
-                  value={resetForm.confirmPassword}
-                  secureTextEntry
-                  onChangeText={(value) =>
-                    setResetForm((current) => ({ ...current, confirmPassword: value }))
-                  }
-                />
-                <View style={styles.buttonRow}>
-                  <Pressable style={styles.secondaryButton} onPress={() => resetCodeMutation.mutate()}>
-                    <Text style={styles.secondaryText}>获取重置验证码</Text>
-                  </Pressable>
-                  <Pressable style={styles.primaryButton} onPress={() => resetPasswordMutation.mutate()}>
-                    <Text style={styles.primaryText}>重置密码</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.authEntryRow}>
-                  <Pressable style={styles.linkButton} onPress={() => setAuthMode('login')}>
-                    <Text style={styles.linkButtonText}>返回账号登录</Text>
-                  </Pressable>
-                </View>
-              </>
-            ) : (
-              <>
-                <Field
-                  label="手机号"
-                  value={registerForm.phone}
-                  onChangeText={(value) => setRegisterForm((current) => ({ ...current, phone: value }))}
-                />
-                <Field
-                  label="学号"
-                  value={registerForm.studentId}
-                  onChangeText={(value) => setRegisterForm((current) => ({ ...current, studentId: value }))}
-                />
-                <Field
-                  label="用户名"
-                  value={registerForm.username}
-                  onChangeText={(value) => setRegisterForm((current) => ({ ...current, username: value }))}
-                />
-                <Field
-                  label="真实姓名"
-                  value={registerForm.realName}
-                  onChangeText={(value) => setRegisterForm((current) => ({ ...current, realName: value }))}
-                />
-                <Field
-                  label="密码"
-                  value={registerForm.password}
-                  secureTextEntry
-                  onChangeText={(value) => setRegisterForm((current) => ({ ...current, password: value }))}
-                />
-                <Field
-                  label="确认密码"
-                  value={registerForm.confirmPassword}
-                  secureTextEntry
-                  onChangeText={(value) =>
-                    setRegisterForm((current) => ({ ...current, confirmPassword: value }))
-                  }
-                />
-                <Field
-                  label="验证码"
-                  value={registerForm.verificationCode}
-                  onChangeText={(value) =>
-                    setRegisterForm((current) => ({ ...current, verificationCode: value }))
-                  }
-                />
-                <View style={styles.buttonRow}>
-                  <Pressable style={styles.secondaryButton} onPress={() => codeMutation.mutate()}>
-                    <Text style={styles.secondaryText}>获取验证码</Text>
-                  </Pressable>
-                  <Pressable style={styles.primaryButton} onPress={() => registerMutation.mutate()}>
-                    <Text style={styles.primaryText}>注册</Text>
-                  </Pressable>
-                </View>
-                <View style={styles.authEntryRow}>
-                  <Text style={styles.helper}>已有账号？</Text>
-                  <Pressable style={styles.linkButton} onPress={() => setAuthMode('login')}>
-                    <Text style={styles.linkButtonText}>返回账号登录</Text>
-                  </Pressable>
-                </View>
-              </>
-            )}
+        <View style={styles.card}>
+          <View style={styles.authHeader}>
+            <Text style={styles.sectionTitle}>{title}</Text>
+            <Text style={styles.helper}>{helper}</Text>
           </View>
-        ) : (
-          <>
-            <View style={styles.card}>
-              <Text style={styles.sessionTitle}>
-                {session.user.realName} · {roleLabels[session.user.role]}
-              </Text>
-              <Text style={styles.helper}>当前账号：{session.user.phone}</Text>
-              <View style={styles.summaryRow}>
-                {Object.entries(dashboardQuery.data?.summary ?? {}).map(([label, value], index) => (
-                  <SummaryBadge
-                    key={label}
-                    label={label}
-                    value={value}
-                    accent={['#005bac', '#159447', '#d97706', '#dc2626'][index % 4]}
-                  />
-                ))}
-              </View>
-              <Pressable style={styles.secondaryButton} onPress={() => logoutMutation.mutate()}>
-                <Text style={styles.secondaryText}>退出当前会话</Text>
-              </Pressable>
-            </View>
+          {children}
+        </View>
+      </ScrollView>
+    )
+  }
 
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>账号维护</Text>
+  function LoginScreen() {
+    const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList, 'Login'>>()
+
+    return (
+      <AuthScaffold
+        title="账号登录"
+        helper="使用 Web 端同一账号体系，登录后按角色进入对应移动工作台。"
+      >
+        <Field
+          label="手机号"
+          value={loginForm.phone}
+          onChangeText={(value) => setLoginForm((current) => ({ ...current, phone: value }))}
+        />
+        <Field
+          label="密码"
+          value={loginForm.password}
+          secureTextEntry
+          onChangeText={(value) => setLoginForm((current) => ({ ...current, password: value }))}
+        />
+        <Pressable style={styles.primaryButton} onPress={() => loginMutation.mutate()}>
+          {loginMutation.isPending ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>登录</Text>}
+        </Pressable>
+        <Text style={styles.helper}>教师：13900139000 / Teacher123!，教务员：13700137000 / Officer123!</Text>
+        <View style={styles.authEntryRow}>
+          <Pressable style={styles.linkButton} onPress={() => navigation.navigate('ResetPassword')}>
+            <Text style={styles.linkButtonText}>忘记密码？</Text>
+          </Pressable>
+          <Text style={styles.helper}>还没有学生账号？</Text>
+          <Pressable style={styles.linkButton} onPress={() => navigation.navigate('Register')}>
+            <Text style={styles.linkButtonText}>学生注册</Text>
+          </Pressable>
+        </View>
+      </AuthScaffold>
+    )
+  }
+
+  function RegisterScreen() {
+    const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList, 'Register'>>()
+
+    return (
+      <AuthScaffold
+        title="学生注册"
+        helper="学生完成手机号验证后即可使用移动端课程互动功能。"
+      >
+        <Field
+          label="手机号"
+          value={registerForm.phone}
+          onChangeText={(value) => setRegisterForm((current) => ({ ...current, phone: value }))}
+        />
+        <Field
+          label="学号"
+          value={registerForm.studentId}
+          onChangeText={(value) => setRegisterForm((current) => ({ ...current, studentId: value }))}
+        />
+        <Field
+          label="用户名"
+          value={registerForm.username}
+          onChangeText={(value) => setRegisterForm((current) => ({ ...current, username: value }))}
+        />
+        <Field
+          label="真实姓名"
+          value={registerForm.realName}
+          onChangeText={(value) => setRegisterForm((current) => ({ ...current, realName: value }))}
+        />
+        <Field
+          label="密码"
+          value={registerForm.password}
+          secureTextEntry
+          onChangeText={(value) => setRegisterForm((current) => ({ ...current, password: value }))}
+        />
+        <Field
+          label="确认密码"
+          value={registerForm.confirmPassword}
+          secureTextEntry
+          onChangeText={(value) =>
+            setRegisterForm((current) => ({ ...current, confirmPassword: value }))
+          }
+        />
+        <Field
+          label="验证码"
+          value={registerForm.verificationCode}
+          onChangeText={(value) =>
+            setRegisterForm((current) => ({ ...current, verificationCode: value }))
+          }
+        />
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.secondaryButton} onPress={() => codeMutation.mutate()}>
+            <Text style={styles.secondaryText}>获取验证码</Text>
+          </Pressable>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() =>
+              registerMutation.mutate(undefined, {
+                onSuccess: () => navigation.navigate('Login'),
+              })
+            }
+          >
+            <Text style={styles.primaryText}>注册</Text>
+          </Pressable>
+        </View>
+        <View style={styles.authEntryRow}>
+          <Text style={styles.helper}>已有账号？</Text>
+          <Pressable style={styles.linkButton} onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.linkButtonText}>返回账号登录</Text>
+          </Pressable>
+        </View>
+      </AuthScaffold>
+    )
+  }
+
+  function ResetPasswordScreen() {
+    const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList, 'ResetPassword'>>()
+
+    return (
+      <AuthScaffold
+        title="找回密码"
+        helper="通过手机号验证码重置密码，完成后返回登录页。"
+      >
+        <Field
+          label="手机号"
+          value={resetForm.phone}
+          onChangeText={(value) => setResetForm((current) => ({ ...current, phone: value }))}
+        />
+        <Field
+          label="验证码"
+          value={resetForm.verificationCode}
+          onChangeText={(value) =>
+            setResetForm((current) => ({ ...current, verificationCode: value }))
+          }
+        />
+        <Field
+          label="新密码"
+          value={resetForm.newPassword}
+          secureTextEntry
+          onChangeText={(value) =>
+            setResetForm((current) => ({ ...current, newPassword: value }))
+          }
+        />
+        <Field
+          label="确认新密码"
+          value={resetForm.confirmPassword}
+          secureTextEntry
+          onChangeText={(value) =>
+            setResetForm((current) => ({ ...current, confirmPassword: value }))
+          }
+        />
+        <View style={styles.buttonRow}>
+          <Pressable style={styles.secondaryButton} onPress={() => resetCodeMutation.mutate()}>
+            <Text style={styles.secondaryText}>获取重置验证码</Text>
+          </Pressable>
+          <Pressable
+            style={styles.primaryButton}
+            onPress={() =>
+              resetPasswordMutation.mutate(undefined, {
+                onSuccess: () => navigation.navigate('Login'),
+              })
+            }
+          >
+            <Text style={styles.primaryText}>重置密码</Text>
+          </Pressable>
+        </View>
+        <View style={styles.authEntryRow}>
+          <Pressable style={styles.linkButton} onPress={() => navigation.navigate('Login')}>
+            <Text style={styles.linkButtonText}>返回账号登录</Text>
+          </Pressable>
+        </View>
+      </AuthScaffold>
+    )
+  }
+
+  function RoleScreen({
+    title,
+    subtitle,
+    children,
+  }: {
+    title: string
+    subtitle?: string
+    children: ReactNode
+  }) {
+    if (!session) return null
+
+    return (
+      <>
+        <RoleHeader
+          title={title}
+          subtitle={subtitle}
+          user={session.user}
+          isLoggingOut={logoutMutation.isPending}
+          onLogout={() => logoutMutation.mutate()}
+        />
+        <ScreenScroll>{children}</ScreenScroll>
+      </>
+    )
+  }
+
+  function DashboardScreen() {
+    if (!session) return null
+
+    return (
+      <RoleScreen
+        title="工作台"
+        subtitle={`${session.user.realName} · ${roleLabels[session.user.role]} · ${session.user.phone}`}
+      >
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>今日概览</Text>
+          <View style={styles.summaryGrid}>
+            {Object.entries(dashboardQuery.data?.summary ?? {}).map(([label, value], index) => (
+              <SummaryBadge
+                key={label}
+                label={label}
+                value={value}
+                accent={['#005bac', '#159447', '#d97706', '#dc2626'][index % 4]}
+              />
+            ))}
+          </View>
+          {dashboardQuery.isLoading ? <ActivityIndicator color="#005bac" /> : null}
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  function AccountScreen() {
+    return (
+      <RoleScreen title="账号" subtitle="查看个人资料、修改手机号或密码、注销当前账号。">
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>账号维护</Text>
               <Field
                 label="用户名"
                 value={profileDraft.username}
@@ -1062,25 +1184,74 @@ function Workspace() {
                 </Pressable>
               </View>
             </View>
+      </RoleScreen>
+    )
+  }
 
-            <View style={styles.card}>
-              <Text style={styles.sectionTitle}>课程池</Text>
-              <View style={styles.chipRow}>
-                {visibleCourses.map((course) => (
-                  <Chip
-                    key={course.id}
-                    label={course.courseCode}
-                    active={selectedCourseId === course.id}
-                    onPress={() => {
-                      setSelectedCourseId(course.id)
-                      setSelectedAssignmentId(null)
-                      setSelectedSubmissionId(null)
-                    }}
-                  />
-                ))}
-              </View>
+  function CourseListScreen() {
+    const navigation = useNavigation<NativeStackNavigationProp<CourseStackParamList, 'CourseList'>>()
 
-              {currentRole === 'student' && selectedCourseId ? (
+    return (
+      <RoleScreen title="课程" subtitle="选择课程后进入课程工作区。">
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>课程列表</Text>
+          <View style={styles.listBlock}>
+            {visibleCourses.map((course) => (
+              <Pressable
+                key={course.id}
+                style={[styles.listItem, selectedCourseId === course.id ? styles.listItemActive : null]}
+                onPress={() => {
+                  setSelectedCourseId(course.id)
+                  setSelectedAssignmentId(null)
+                  setSelectedSubmissionId(null)
+                  navigation.navigate('CourseWorkspace', { courseId: course.id })
+                }}
+              >
+                <Text style={styles.listItemTitle}>{course.courseName}</Text>
+                <Text style={styles.listItemCopy}>{course.courseCode} · {course.semester}</Text>
+                <Text style={styles.helper}>{course.teacherName ?? course.teacherId} · {course.location}</Text>
+              </Pressable>
+            ))}
+            {visibleCourses.length === 0 ? <Text style={styles.helper}>暂无可查看课程。</Text> : null}
+          </View>
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  function CourseWorkspaceScreen() {
+    const navigation = useNavigation<NativeStackNavigationProp<CourseStackParamList, 'CourseWorkspace'>>()
+    const route = useRoute<RouteProp<CourseStackParamList, 'CourseWorkspace'>>()
+    const routeCourseId = route.params?.courseId
+    const activeCourse = visibleCourses.find((course) => course.id === routeCourseId) ?? selectedCourse
+
+    useEffect(() => {
+      if (routeCourseId && routeCourseId !== selectedCourseId) {
+        setSelectedCourseId(routeCourseId)
+        setSelectedAssignmentId(null)
+        setSelectedSubmissionId(null)
+      }
+    }, [routeCourseId])
+
+    return (
+      <RoleScreen
+        title="课程工作区"
+        subtitle={activeCourse ? `${activeCourse.courseName} · ${activeCourse.courseCode}` : '课程上下文'}
+      >
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{activeCourse?.courseName ?? '未选择课程'}</Text>
+          {activeCourse ? (
+            <>
+              <Text style={styles.helper}>{activeCourse.courseCode} · {activeCourse.semester}</Text>
+              <Text style={styles.helper}>{activeCourse.teacherName ?? activeCourse.teacherId} · {activeCourse.scheduleText}</Text>
+              <Text style={styles.helper}>{activeCourse.location} · 容量 {activeCourse.capacity}</Text>
+            </>
+          ) : (
+            <Text style={styles.helper}>请先从课程列表选择课程。</Text>
+          )}
+        </View>
+
+        {currentRole === 'student' && selectedCourseId ? (
                 <Pressable
                   style={styles.primaryButton}
                   onPress={() => enrollMutation.mutate(selectedCourseId)}
@@ -1092,7 +1263,7 @@ function Workspace() {
               ) : null}
 
               {currentRole === 'officer' ? (
-                <>
+          <View style={styles.card}>
                   <Text style={styles.sectionTitle}>课程创建</Text>
                   <Field label="课程代码" value={courseDraft.courseCode} onChangeText={(value) => setCourseDraft((current) => ({ ...current, courseCode: value }))} />
                   <Field label="课程名称" value={courseDraft.courseName} onChangeText={(value) => setCourseDraft((current) => ({ ...current, courseName: value }))} />
@@ -1105,19 +1276,19 @@ function Workspace() {
                     <Pressable
                       style={styles.secondaryButton}
                       onPress={() => {
-                        if (!selectedCourse) return
+                        if (!activeCourse) return
                         setCourseDraft({
-                          courseCode: selectedCourse.courseCode,
-                          courseName: selectedCourse.courseName,
-                          teacherId: selectedCourse.teacherId,
-                          semester: selectedCourse.semester,
-                          description: selectedCourse.description,
-                          location: selectedCourse.location,
-                          scheduleText: selectedCourse.scheduleText,
-                          capacity: String(selectedCourse.capacity ?? 50),
-                          startDate: selectedCourse.startDate ?? '2026-03-01',
-                          endDate: selectedCourse.endDate ?? '2026-07-01',
-                          status: selectedCourse.status,
+                          courseCode: activeCourse.courseCode,
+                          courseName: activeCourse.courseName,
+                          teacherId: activeCourse.teacherId,
+                          semester: activeCourse.semester,
+                          description: activeCourse.description,
+                          location: activeCourse.location,
+                          scheduleText: activeCourse.scheduleText,
+                          capacity: String(activeCourse.capacity ?? 50),
+                          startDate: activeCourse.startDate ?? '2026-03-01',
+                          endDate: activeCourse.endDate ?? '2026-07-01',
+                          status: activeCourse.status,
                         })
                       }}
                     >
@@ -1144,11 +1315,11 @@ function Workspace() {
                   >
                     <Text style={styles.dangerText}>删除当前课程</Text>
                   </Pressable>
-                </>
+          </View>
               ) : null}
 
               {currentRole === 'teacher' ? (
-                <>
+          <View style={styles.card}>
                   <Text style={styles.sectionTitle}>发布作业</Text>
                   <Field label="标题" value={assignmentDraft.title} onChangeText={(value) => setAssignmentDraft((current) => ({ ...current, title: value }))} />
                   <Field label="描述" value={assignmentDraft.description} multiline onChangeText={(value) => setAssignmentDraft((current) => ({ ...current, description: value }))} />
@@ -1187,9 +1358,8 @@ function Workspace() {
                   >
                     <Text style={styles.dangerText}>取消当前作业</Text>
                   </Pressable>
-                </>
+          </View>
               ) : null}
-            </View>
 
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>课程反馈</Text>
@@ -1276,6 +1446,7 @@ function Workspace() {
                     onPress={() => {
                       setSelectedAssignmentId(assignment.id)
                       setSelectedSubmissionId(null)
+                      navigation.navigate('AssignmentDetail', { assignmentId: assignment.id })
                     }}
                   />
                 ))}
@@ -1308,7 +1479,10 @@ function Workspace() {
                       <Pressable
                         key={submission.id}
                         style={[styles.listItem, selectedSubmissionId === submission.id ? styles.listItemActive : null]}
-                        onPress={() => setSelectedSubmissionId(submission.id)}
+                        onPress={() => {
+                          setSelectedSubmissionId(submission.id)
+                          navigation.navigate('SubmissionDetail', { submissionId: submission.id })
+                        }}
                       >
                         <Text style={styles.listItemTitle}>{submission.studentId}</Text>
                         <Text style={styles.listItemCopy}>{submission.content}</Text>
@@ -1340,7 +1514,11 @@ function Workspace() {
               ) : null}
 
               {feedbacks.map((feedback) => (
-                <View key={feedback.id} style={styles.threadCard}>
+                <Pressable
+                  key={feedback.id}
+                  style={styles.threadCard}
+                  onPress={() => navigation.navigate('FeedbackThread', { feedbackId: feedback.id })}
+                >
                   <Text style={styles.threadTag}>{feedback.kind === 'question' ? '学生问题' : '学生反馈'}</Text>
                   <Text style={styles.threadContent}>{feedback.content}</Text>
                   {feedback.responses.map((response) => (
@@ -1386,12 +1564,275 @@ function Workspace() {
                       </Pressable>
                     </View>
                   ) : null}
-                </View>
+                </Pressable>
               ))}
             </View>
-          </>
+      </RoleScreen>
+    )
+  }
+
+  function AssignmentDetailScreen() {
+    const navigation = useNavigation<NativeStackNavigationProp<CourseStackParamList, 'AssignmentDetail'>>()
+    const route = useRoute<RouteProp<CourseStackParamList, 'AssignmentDetail'>>()
+    const routeAssignmentId = route.params?.assignmentId
+
+    useEffect(() => {
+      if (routeAssignmentId && routeAssignmentId !== selectedAssignmentId) {
+        setSelectedAssignmentId(routeAssignmentId)
+        setSelectedSubmissionId(null)
+      }
+    }, [routeAssignmentId])
+
+    return (
+      <RoleScreen
+        title="作业详情"
+        subtitle={selectedAssignment ? selectedAssignment.title : '作业上下文'}
+      >
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{selectedAssignment?.title ?? '未选择作业'}</Text>
+          {selectedAssignment ? (
+            <>
+              <Text style={styles.helper}>{selectedAssignment.description}</Text>
+              <Text style={styles.helper}>截止时间：{selectedAssignment.dueAt}</Text>
+            </>
+          ) : (
+            <Text style={styles.helper}>请从课程工作区选择作业。</Text>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>作业与提交</Text>
+          {currentRole === 'student' ? (
+            <>
+              <Field label="提交内容" value={submissionContent} multiline onChangeText={setSubmissionContent} />
+              <Pressable style={styles.primaryButton} onPress={() => createSubmissionMutation.mutate()}>
+                <Text style={styles.primaryText}>提交当前作业</Text>
+              </Pressable>
+              <View style={styles.buttonRow}>
+                <Pressable style={styles.secondaryButton} onPress={() => getSubmissionMutation.mutate()}>
+                  <Text style={styles.secondaryText}>查看提交</Text>
+                </Pressable>
+                <Pressable style={styles.secondaryButton} onPress={() => updateSubmissionMutation.mutate()}>
+                  <Text style={styles.secondaryText}>修改答案</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : (
+            <>
+              <View style={styles.listBlock}>
+                {submissions.map((submission) => (
+                  <Pressable
+                    key={submission.id}
+                    style={[styles.listItem, selectedSubmissionId === submission.id ? styles.listItemActive : null]}
+                    onPress={() => {
+                      setSelectedSubmissionId(submission.id)
+                      navigation.navigate('SubmissionDetail', { submissionId: submission.id })
+                    }}
+                  >
+                    <Text style={styles.listItemTitle}>{submission.studentName ?? submission.studentId}</Text>
+                    <Text style={styles.listItemCopy}>{submission.content}</Text>
+                  </Pressable>
+                ))}
+                {submissions.length === 0 ? <Text style={styles.helper}>当前作业暂无提交。</Text> : null}
+              </View>
+            </>
+          )}
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  function SubmissionDetailScreen() {
+    const route = useRoute<RouteProp<CourseStackParamList, 'SubmissionDetail'>>()
+    const routeSubmissionId = route.params?.submissionId
+
+    useEffect(() => {
+      if (routeSubmissionId && routeSubmissionId !== selectedSubmissionId) {
+        setSelectedSubmissionId(routeSubmissionId)
+      }
+    }, [routeSubmissionId])
+
+    return (
+      <RoleScreen
+        title="提交详情"
+        subtitle={selectedSubmission ? `${selectedSubmission.studentName ?? selectedSubmission.studentId}` : '提交上下文'}
+      >
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>提交内容</Text>
+          <Text style={styles.helper}>{selectedSubmission?.content ?? '请从提交列表选择记录。'}</Text>
+          {currentRole === 'teacher' ? (
+            <>
+              <Field label="分数" value={gradeDraft.score} onChangeText={(value) => setGradeDraft((current) => ({ ...current, score: value }))} />
+              <Field label="评语" value={gradeDraft.teacherFeedback} multiline onChangeText={(value) => setGradeDraft((current) => ({ ...current, teacherFeedback: value }))} />
+              <Pressable style={styles.primaryButton} onPress={() => gradeMutation.mutate()}>
+                <Text style={styles.primaryText}>批改当前提交</Text>
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>反馈线程</Text>
+          {currentRole === 'student' ? (
+            <>
+              <View style={styles.chipRow}>
+                <Chip label="问题" active={feedbackDraft.kind === 'question'} onPress={() => setFeedbackDraft((current) => ({ ...current, kind: 'question' }))} />
+                <Chip label="反馈" active={feedbackDraft.kind === 'feedback'} onPress={() => setFeedbackDraft((current) => ({ ...current, kind: 'feedback' }))} />
+              </View>
+              <Field label="内容" value={feedbackDraft.content} multiline onChangeText={(value) => setFeedbackDraft((current) => ({ ...current, content: value }))} />
+              <Pressable style={styles.primaryButton} onPress={() => feedbackMutation.mutate()}>
+                <Text style={styles.primaryText}>发布到当前线程</Text>
+              </Pressable>
+            </>
+          ) : null}
+          {feedbacks.map((feedback) => (
+            <View key={feedback.id} style={styles.threadCard}>
+              <Text style={styles.threadTag}>{feedback.kind === 'question' ? '学生问题' : '学生反馈'}</Text>
+              <Text style={styles.threadContent}>{feedback.content}</Text>
+            </View>
+          ))}
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  function FeedbackThreadScreen() {
+    const route = useRoute<RouteProp<CourseStackParamList, 'FeedbackThread'>>()
+    const feedback = feedbacks.find((item) => item.id === route.params?.feedbackId)
+
+    return (
+      <RoleScreen title="反馈详情" subtitle={feedback?.assignmentTitle ?? '反馈线程'}>
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>{feedback ? (feedback.kind === 'question' ? '学生问题' : '学生反馈') : '未选择反馈'}</Text>
+          <Text style={styles.helper}>{feedback?.content ?? '请从反馈列表选择线程。'}</Text>
+          {feedback?.responses.map((response) => (
+            <View key={response.id} style={styles.responseBubble}>
+              <Text style={styles.responseTag}>教师回复</Text>
+              <Text style={styles.responseText}>{response.content}</Text>
+            </View>
+          ))}
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  function CoursesTab() {
+    return (
+      <CourseStack
+        renderCourseList={() => <CourseListScreen />}
+        renderCourseWorkspace={() => <CourseWorkspaceScreen />}
+        renderAssignmentDetail={() => <AssignmentDetailScreen />}
+        renderSubmissionDetail={() => <SubmissionDetailScreen />}
+        renderFeedbackThread={() => <FeedbackThreadScreen />}
+      />
+    )
+  }
+
+  function AssignmentsTabScreen() {
+    return (
+      <RoleScreen title={currentRole === 'teacher' ? '作业管理' : '我的作业'} subtitle="当前阶段保留课程内作业上下文。">
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>当前课程作业</Text>
+          <Text style={styles.helper}>当前课程：{selectedCourse?.courseName ?? '请先在课程 Tab 中选择课程。'}</Text>
+          <View style={styles.chipRow}>
+            {assignments.map((assignment) => (
+              <Chip
+                key={assignment.id}
+                label={assignment.title}
+                active={selectedAssignmentId === assignment.id}
+                onPress={() => {
+                  setSelectedAssignmentId(assignment.id)
+                  setSelectedSubmissionId(null)
+                }}
+              />
+            ))}
+          </View>
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  function TeacherTasksScreen() {
+    return (
+      <RoleScreen title="教学任务" subtitle="待批改提交和未回答反馈将在工作台阶段展开。">
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>任务入口</Text>
+          <Text style={styles.helper}>底部任务栏已为教师保留独立教学任务入口。</Text>
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  function OfficerUsersScreen() {
+    return (
+      <RoleScreen title="用户" subtitle="教务员用户管理入口。">
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>用户管理</Text>
+          <Text style={styles.helper}>三角色用户列表和启停操作将在教务员阶段接入。</Text>
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  function OfficerFeedbacksScreen() {
+    return (
+      <RoleScreen title="反馈" subtitle="课程反馈查看入口。">
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>课程反馈</Text>
+          <View style={styles.listBlock}>
+            {courseFeedbacks.map((feedback) => (
+              <View key={feedback.id} style={styles.threadCard}>
+                <Text style={styles.threadTag}>
+                  {courseFeedbackDimensionLabels[feedback.dimension]} · {feedback.courseName}
+                </Text>
+                <Text style={styles.threadContent}>{feedback.content}</Text>
+                <Text style={styles.helper}>学生：{feedback.studentName ?? feedback.studentId}</Text>
+              </View>
+            ))}
+            {courseFeedbacks.length === 0 ? <Text style={styles.helper}>暂无课程反馈。</Text> : null}
+          </View>
+        </View>
+      </RoleScreen>
+    )
+  }
+
+  if (isHydratingSession) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" />
+        <View style={styles.loadingScreen}>
+          <ActivityIndicator color="#005bac" />
+          <Text style={styles.helper}>正在恢复移动端会话。</Text>
+        </View>
+      </SafeAreaView>
+    )
+  }
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" />
+      <NavigationContainer>
+        {!session ? (
+          <AuthStack
+            renderLogin={() => <LoginScreen />}
+            renderRegister={() => <RegisterScreen />}
+            renderResetPassword={() => <ResetPasswordScreen />}
+          />
+        ) : (
+          <RoleTabs
+            role={session.user.role}
+            renderScreens={{
+              Dashboard: () => <DashboardScreen />,
+              Courses: () => <CoursesTab />,
+              Assignments: () => <AssignmentsTabScreen />,
+              TeacherTasks: () => <TeacherTasksScreen />,
+              OfficerUsers: () => <OfficerUsersScreen />,
+              OfficerFeedbacks: () => <OfficerFeedbacksScreen />,
+              Account: () => <AccountScreen />,
+            }}
+          />
         )}
-      </ScrollView>
+      </NavigationContainer>
     </SafeAreaView>
   )
 }
@@ -1516,6 +1957,9 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   summaryRow: {
+    gap: 10,
+  },
+  summaryGrid: {
     gap: 10,
   },
   summaryCard: {
@@ -1725,5 +2169,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: '#111827',
+  },
+  loadingScreen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
   },
 })
