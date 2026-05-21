@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 describe('server health endpoint', () => {
   it('returns a helpful landing page from /', async () => {
-    const imported = await import('../src/app').catch(() => null)
+    const imported = await import('./_helpers/test-app').catch(() => null)
 
     expect(imported).not.toBeNull()
 
@@ -19,7 +19,7 @@ describe('server health endpoint', () => {
   })
 
   it('returns service metadata from /health', async () => {
-    const imported = await import('../src/app').catch(() => null)
+    const imported = await import('./_helpers/test-app').catch(() => null)
 
     expect(imported).not.toBeNull()
 
@@ -43,7 +43,7 @@ describe('server health endpoint', () => {
   })
 
   it('allows mutating API methods in CORS preflight responses', async () => {
-    const imported = await import('../src/app').catch(() => null)
+    const imported = await import('./_helpers/test-app').catch(() => null)
 
     expect(imported).not.toBeNull()
 

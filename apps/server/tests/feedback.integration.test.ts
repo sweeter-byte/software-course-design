@@ -5,9 +5,8 @@ import { relativeIsoDate } from './test-dates'
 const feedbackThreadCourseCode = 'SE-4701'
 
 async function buildFeedbackApp() {
-  const { buildApp } = await import('../src/app')
+  const { buildApp } = await import('./_helpers/test-app')
   const app = await buildApp({
-    databasePath: ':memory:',
     env: 'test',
     seedDemoData: true,
   })

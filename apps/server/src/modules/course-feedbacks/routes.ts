@@ -1,15 +1,15 @@
-import type { DatabaseSync } from 'node:sqlite'
 import type { FastifyInstance } from 'fastify'
 import { nanoid } from 'nanoid'
 
 import { courseFeedbackSchema } from '../../../../../packages/shared/src/index'
 
+import type { Database } from '../../lib/db/client'
 import { requireAuth, requireRole } from '../../lib/guards'
 import { AppError, sendCreated } from '../../lib/http'
 import type { LogWriter } from '../../lib/logging'
 
 interface CourseFeedbackRouteContext {
-  database: DatabaseSync
+  database: Database
   logger: LogWriter
 }
 
@@ -45,8 +45,8 @@ function toCourseFeedback(row: CourseFeedbackRow) {
   }
 }
 
-function getCourseFeedbackById(database: DatabaseSync, feedbackId: string) {
-  return database
+async function getCourseFeedbackById(database: Database, feedbackId: string) {
+  return (await database
     .prepare(
       `
         SELECT
@@ -69,7 +69,7 @@ function getCourseFeedbackById(database: DatabaseSync, feedbackId: string) {
         LIMIT 1
       `,
     )
-    .get(feedbackId) as CourseFeedbackRow | undefined
+    .get(feedbackId)) as CourseFeedbackRow | undefined
 }
 
 export function registerCourseFeedbackRoutes(app: FastifyInstance, context: CourseFeedbackRouteContext) {
@@ -78,15 +78,15 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
     const params = request.params as { courseId: string }
     const payload = courseFeedbackSchema.parse(request.body)
 
-    const course = context.database
+    const course = (await context.database
       .prepare('SELECT id FROM courses WHERE id = ? LIMIT 1')
-      .get(params.courseId) as { id: string } | undefined
+      .get(params.courseId)) as { id: string } | undefined
 
     if (!course) {
       throw new AppError('course_not_found', 404, 'COURSE_NOT_FOUND')
     }
 
-    const enrollment = context.database
+    const enrollment = (await context.database
       .prepare(
         `
           SELECT id
@@ -95,7 +95,7 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
           LIMIT 1
         `,
       )
-      .get(params.courseId, actor.sub) as { id: string } | undefined
+      .get(params.courseId, actor.sub)) as { id: string } | undefined
 
     if (!enrollment) {
       throw new AppError('course_enrollment_required', 403, 'COURSE_ENROLLMENT_REQUIRED')
@@ -104,7 +104,7 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
     const now = new Date().toISOString()
     const feedbackId = nanoid()
 
-    context.database
+    await context.database
       .prepare(
         `
           INSERT INTO course_feedbacks (
@@ -114,7 +114,7 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
       )
       .run(feedbackId, params.courseId, actor.sub, payload.dimension, payload.content, 'open', now, now)
 
-    const feedback = getCourseFeedbackById(context.database, feedbackId)
+    const feedback = await getCourseFeedbackById(context.database, feedbackId)
 
     if (!feedback) {
       throw new AppError('course_feedback_not_found', 404, 'COURSE_FEEDBACK_NOT_FOUND')
@@ -156,7 +156,7 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
       params.push(actor.sub)
     }
 
-    const items = context.database
+    const items = (await context.database
       .prepare(
         `
           SELECT
@@ -179,7 +179,7 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
           ORDER BY course_feedbacks.created_at DESC
         `,
       )
-      .all(...params) as CourseFeedbackRow[]
+      .all(...params)) as CourseFeedbackRow[]
 
     return {
       success: true,
@@ -197,7 +197,7 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
     const actor = await requireRole(request, ['student'])
     const params = request.params as { feedbackId: string }
     const payload = courseFeedbackSchema.parse(request.body)
-    const feedback = getCourseFeedbackById(context.database, params.feedbackId)
+    const feedback = await getCourseFeedbackById(context.database, params.feedbackId)
 
     if (!feedback || feedback.status === 'deleted') {
       throw new AppError('course_feedback_not_found', 404, 'COURSE_FEEDBACK_NOT_FOUND')
@@ -209,11 +209,11 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare('UPDATE course_feedbacks SET dimension = ?, content = ?, updated_at = ? WHERE id = ?')
       .run(payload.dimension, payload.content, now, params.feedbackId)
 
-    const updatedFeedback = getCourseFeedbackById(context.database, params.feedbackId)
+    const updatedFeedback = await getCourseFeedbackById(context.database, params.feedbackId)
 
     if (!updatedFeedback) {
       throw new AppError('course_feedback_not_found', 404, 'COURSE_FEEDBACK_NOT_FOUND')
@@ -240,7 +240,7 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
   app.delete('/course-feedbacks/:feedbackId', async (request) => {
     const actor = await requireRole(request, ['student'])
     const params = request.params as { feedbackId: string }
-    const feedback = getCourseFeedbackById(context.database, params.feedbackId)
+    const feedback = await getCourseFeedbackById(context.database, params.feedbackId)
 
     if (!feedback || feedback.status === 'deleted') {
       throw new AppError('course_feedback_not_found', 404, 'COURSE_FEEDBACK_NOT_FOUND')
@@ -252,7 +252,7 @@ export function registerCourseFeedbackRoutes(app: FastifyInstance, context: Cour
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare("UPDATE course_feedbacks SET status = 'deleted', updated_at = ? WHERE id = ?")
       .run(now, params.feedbackId)
 

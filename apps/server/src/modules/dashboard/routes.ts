@@ -1,28 +1,28 @@
-import type { DatabaseSync } from 'node:sqlite'
 import type { FastifyInstance } from 'fastify'
 
+import type { Database } from '../../lib/db/client'
 import { requireRole } from '../../lib/guards'
 
 interface DashboardRouteContext {
-  database: DatabaseSync
+  database: Database
 }
 
 export function registerDashboardRoutes(app: FastifyInstance, context: DashboardRouteContext) {
   app.get('/officer', async (request) => {
     await requireRole(request, ['officer'])
 
-    const totalCourses = (context.database.prepare('SELECT COUNT(*) AS count FROM courses').get() as { count: number }).count
+    const totalCourses = ((await context.database.prepare('SELECT COUNT(*) AS count FROM courses').get()) as { count: number }).count
     const totalTeachers = (
-      context.database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'teacher'").get() as { count: number }
+      (await context.database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'teacher'").get()) as { count: number }
     ).count
     const totalStudents = (
-      context.database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'student'").get() as { count: number }
+      (await context.database.prepare("SELECT COUNT(*) AS count FROM users WHERE role = 'student'").get()) as { count: number }
     ).count
     const openFeedbacks = (
-      context.database.prepare("SELECT COUNT(*) AS count FROM feedbacks WHERE status = 'open'").get() as { count: number }
+      (await context.database.prepare("SELECT COUNT(*) AS count FROM feedbacks WHERE status = 'open'").get()) as { count: number }
     ).count
     const courseFeedbacks = (
-      context.database.prepare('SELECT COUNT(*) AS count FROM course_feedbacks').get() as { count: number }
+      (await context.database.prepare('SELECT COUNT(*) AS count FROM course_feedbacks').get()) as { count: number }
     ).count
 
     return {
@@ -47,17 +47,17 @@ export function registerDashboardRoutes(app: FastifyInstance, context: Dashboard
     const actor = await requireRole(request, ['teacher'])
 
     const totalCourses = (
-      context.database
+      (await context.database
         .prepare('SELECT COUNT(*) AS count FROM courses WHERE teacher_id = ?')
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
     const publishedAssignments = (
-      context.database
+      (await context.database
         .prepare("SELECT COUNT(*) AS count FROM assignments WHERE teacher_id = ? AND status = 'published'")
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
     const pendingGrades = (
-      context.database
+      (await context.database
         .prepare(
           `
             SELECT COUNT(*) AS count
@@ -66,10 +66,10 @@ export function registerDashboardRoutes(app: FastifyInstance, context: Dashboard
             WHERE assignments.teacher_id = ? AND submissions.status = 'submitted'
           `,
         )
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
     const openFeedbacks = (
-      context.database
+      (await context.database
         .prepare(
           `
             SELECT COUNT(*) AS count
@@ -78,10 +78,10 @@ export function registerDashboardRoutes(app: FastifyInstance, context: Dashboard
             WHERE assignments.teacher_id = ? AND feedbacks.status = 'open'
           `,
         )
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
     const courseFeedbacks = (
-      context.database
+      (await context.database
         .prepare(
           `
             SELECT COUNT(*) AS count
@@ -90,7 +90,7 @@ export function registerDashboardRoutes(app: FastifyInstance, context: Dashboard
             WHERE courses.teacher_id = ?
           `,
         )
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
 
     return {
@@ -115,12 +115,12 @@ export function registerDashboardRoutes(app: FastifyInstance, context: Dashboard
     const actor = await requireRole(request, ['student'])
 
     const enrolledCourses = (
-      context.database
+      (await context.database
         .prepare("SELECT COUNT(*) AS count FROM course_enrollments WHERE student_id = ? AND status = 'enrolled'")
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
     const pendingAssignments = (
-      context.database
+      (await context.database
         .prepare(
           `
             SELECT COUNT(*) AS count
@@ -135,22 +135,22 @@ export function registerDashboardRoutes(app: FastifyInstance, context: Dashboard
               AND submissions.id IS NULL
           `,
         )
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
     const gradedSubmissions = (
-      context.database
+      (await context.database
         .prepare("SELECT COUNT(*) AS count FROM submissions WHERE student_id = ? AND status = 'graded'")
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
     const openFeedbacks = (
-      context.database
+      (await context.database
         .prepare("SELECT COUNT(*) AS count FROM feedbacks WHERE student_id = ? AND status = 'open'")
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
     const courseFeedbacks = (
-      context.database
+      (await context.database
         .prepare('SELECT COUNT(*) AS count FROM course_feedbacks WHERE student_id = ?')
-        .get(actor.sub) as { count: number }
+        .get(actor.sub)) as { count: number }
     ).count
 
     return {

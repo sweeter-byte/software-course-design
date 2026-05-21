@@ -3,9 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { relativeIsoDate } from './test-dates'
 
 async function buildManagementApp() {
-  const { buildApp } = await import('../src/app')
+  const { buildApp } = await import('./_helpers/test-app')
   const app = await buildApp({
-    databasePath: ':memory:',
     env: 'test',
     seedDemoData: true,
   })

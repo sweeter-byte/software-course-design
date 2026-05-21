@@ -23,7 +23,7 @@ const START_TIME = Symbol('request-start-time')
 
 export async function buildApp(options: BuildAppOptions = {}) {
   const config = resolveAppConfig(options)
-  const database = createDatabase(config.databasePath)
+  const database = await createDatabase(config.databaseConfig, { reset: options.resetDatabase })
   const logger = createLogWriter(config.logsDir)
 
   if (options.seedDemoData) {
@@ -62,7 +62,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   })
 
   app.addHook('onClose', async () => {
-    database.close()
+    await database.close()
   })
 
   app.setNotFoundHandler((request, reply) => {

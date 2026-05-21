@@ -1,9 +1,13 @@
-import { rmSync } from 'node:fs'
-
+import { createDatabase } from './client'
 import { resolveAppConfig } from '../config'
 
-const config = resolveAppConfig()
-
-if (config.databasePath !== ':memory:') {
-  rmSync(config.databasePath, { force: true })
+async function resetDatabase() {
+  const config = resolveAppConfig()
+  const database = await createDatabase(config.databaseConfig, { reset: true })
+  await database.close()
 }
+
+resetDatabase().catch((error) => {
+  console.error(error)
+  process.exit(1)
+})

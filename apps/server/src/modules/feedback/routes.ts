@@ -1,15 +1,15 @@
-import type { DatabaseSync } from 'node:sqlite'
 import type { FastifyInstance } from 'fastify'
 import { nanoid } from 'nanoid'
 
 import { feedbackSchema } from '../../../../../packages/shared/src/index'
 
+import type { Database } from '../../lib/db/client'
 import type { LogWriter } from '../../lib/logging'
 import { requireAuth, requireRole } from '../../lib/guards'
 import { AppError, sendCreated } from '../../lib/http'
 
 interface FeedbackRouteContext {
-  database: DatabaseSync
+  database: Database
   logger: LogWriter
 }
 
@@ -122,8 +122,8 @@ function parseBoundedInteger(raw: string | undefined, fallback: number, min: num
   return parsed
 }
 
-function getFeedbackById(database: DatabaseSync, feedbackId: string) {
-  return database
+async function getFeedbackById(database: Database, feedbackId: string) {
+  return (await database
     .prepare(
       `
         SELECT id, assignment_id, submission_id, student_id, kind, content, status, created_at, updated_at
@@ -132,13 +132,13 @@ function getFeedbackById(database: DatabaseSync, feedbackId: string) {
         LIMIT 1
       `,
     )
-    .get(feedbackId) as FeedbackRow | undefined
+    .get(feedbackId)) as FeedbackRow | undefined
 }
 
-function feedbackHasTeacherResponse(database: DatabaseSync, feedbackId: string) {
-  const row = database
+async function feedbackHasTeacherResponse(database: Database, feedbackId: string) {
+  const row = (await database
     .prepare('SELECT 1 AS present FROM responses WHERE feedback_id = ? LIMIT 1')
-    .get(feedbackId) as { present: number } | undefined
+    .get(feedbackId)) as { present: number } | undefined
   return row !== undefined
 }
 
@@ -192,7 +192,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
     )
     const offset = parseBoundedInteger(query.offset, 0, 0, Number.MAX_SAFE_INTEGER)
 
-    const feedbacks = context.database
+    const feedbacks = (await context.database
       .prepare(
         `
           SELECT
@@ -224,11 +224,11 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
           LIMIT ? OFFSET ?
         `,
       )
-      .all(...values, limit, offset) as FeedbackThreadRow[]
+      .all(...values, limit, offset)) as FeedbackThreadRow[]
 
     const responses =
       feedbacks.length > 0
-        ? (context.database
+        ? ((await context.database
             .prepare(
               `
                 SELECT
@@ -246,7 +246,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
                 ORDER BY responses.created_at ASC
               `,
             )
-            .all(...feedbacks.map((feedback) => feedback.id)) as FeedbackResponseRow[])
+            .all(...feedbacks.map((feedback) => feedback.id))) as FeedbackResponseRow[])
         : []
 
     return {
@@ -274,7 +274,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
       throw new AppError('submission_id_required', 400, 'SUBMISSION_ID_REQUIRED')
     }
 
-    const submission = context.database
+    const submission = (await context.database
       .prepare(
         `
           SELECT
@@ -288,7 +288,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
           LIMIT 1
         `,
       )
-      .get(query.submissionId) as
+      .get(query.submissionId)) as
       | {
           id: string
           student_id: string
@@ -309,7 +309,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
       throw new AppError('forbidden', 403, 'FORBIDDEN')
     }
 
-    const feedbacks = context.database
+    const feedbacks = (await context.database
       .prepare(
         `
           SELECT id, assignment_id, submission_id, student_id, kind, content, status, created_at, updated_at
@@ -318,9 +318,9 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
           ORDER BY created_at ASC
         `,
       )
-      .all(query.submissionId) as FeedbackRow[]
+      .all(query.submissionId)) as FeedbackRow[]
 
-    const responses = context.database
+    const responses = (await context.database
       .prepare(
         `
           SELECT id, feedback_id, teacher_id, content, created_at, updated_at, edited_at
@@ -329,7 +329,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
           ORDER BY created_at ASC
         `,
       )
-      .all(query.submissionId) as Array<{
+      .all(query.submissionId)) as Array<{
       id: string
       feedback_id: string
       teacher_id: string
@@ -377,7 +377,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
     const params = request.params as { submissionId: string }
     const payload = feedbackSchema.parse(request.body)
 
-    const submission = context.database
+    const submission = (await context.database
       .prepare(
         `
           SELECT id, assignment_id, student_id, status
@@ -386,7 +386,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
           LIMIT 1
         `,
       )
-      .get(params.submissionId) as
+      .get(params.submissionId)) as
       | {
           id: string
           assignment_id: string
@@ -410,7 +410,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
     const now = new Date().toISOString()
     const feedbackId = nanoid()
 
-    context.database
+    await context.database
       .prepare(
         `
           INSERT INTO feedbacks (
@@ -459,7 +459,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
     const actor = await requireRole(request, ['student'])
     const params = request.params as { feedbackId: string }
     const payload = feedbackSchema.parse(request.body)
-    const feedback = getFeedbackById(context.database, params.feedbackId)
+    const feedback = await getFeedbackById(context.database, params.feedbackId)
 
     if (!feedback || feedback.status === 'deleted') {
       throw new AppError('feedback_not_found', 404, 'FEEDBACK_NOT_FOUND')
@@ -469,7 +469,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
       throw new AppError('forbidden', 403, 'FORBIDDEN')
     }
 
-    if (feedbackHasTeacherResponse(context.database, params.feedbackId)) {
+    if (await feedbackHasTeacherResponse(context.database, params.feedbackId)) {
       throw new AppError(
         'feedback_locked_by_response',
         409,
@@ -479,11 +479,11 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare('UPDATE feedbacks SET kind = ?, content = ?, updated_at = ? WHERE id = ?')
       .run(payload.kind, payload.content, now, params.feedbackId)
 
-    const updatedFeedback = getFeedbackById(context.database, params.feedbackId)
+    const updatedFeedback = await getFeedbackById(context.database, params.feedbackId)
 
     if (!updatedFeedback) {
       throw new AppError('feedback_not_found', 404, 'FEEDBACK_NOT_FOUND')
@@ -510,7 +510,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
   app.delete('/feedbacks/:feedbackId', async (request) => {
     const actor = await requireRole(request, ['student'])
     const params = request.params as { feedbackId: string }
-    const feedback = getFeedbackById(context.database, params.feedbackId)
+    const feedback = await getFeedbackById(context.database, params.feedbackId)
 
     if (!feedback || feedback.status === 'deleted') {
       throw new AppError('feedback_not_found', 404, 'FEEDBACK_NOT_FOUND')
@@ -520,7 +520,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
       throw new AppError('forbidden', 403, 'FORBIDDEN')
     }
 
-    if (feedbackHasTeacherResponse(context.database, params.feedbackId)) {
+    if (await feedbackHasTeacherResponse(context.database, params.feedbackId)) {
       throw new AppError(
         'feedback_locked_by_response',
         409,
@@ -530,7 +530,7 @@ export function registerFeedbackRoutes(app: FastifyInstance, context: FeedbackRo
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare("UPDATE feedbacks SET status = 'deleted', updated_at = ? WHERE id = ?")
       .run(now, params.feedbackId)
 

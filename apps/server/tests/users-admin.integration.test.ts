@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 async function buildUserAdminApp() {
-  const { buildApp } = await import('../src/app')
+  const { buildApp } = await import('./_helpers/test-app')
   return buildApp({
-    databasePath: ':memory:',
     env: 'test',
     seedDemoData: true,
   })

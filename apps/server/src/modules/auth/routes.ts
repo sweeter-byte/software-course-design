@@ -1,4 +1,3 @@
-import type { DatabaseSync } from 'node:sqlite'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { nanoid } from 'nanoid'
 
@@ -12,6 +11,7 @@ import {
 } from '../../../../../packages/shared/src/index'
 
 import type { AppConfig } from '../../lib/config'
+import type { Database } from '../../lib/db/client'
 import { requireAuth } from '../../lib/guards'
 import type { LogWriter } from '../../lib/logging'
 import { AppError, sendCreated } from '../../lib/http'
@@ -19,7 +19,7 @@ import { hashPassword, verifyPassword } from '../../lib/security'
 
 interface AuthRouteContext {
   config: AppConfig
-  database: DatabaseSync
+  database: Database
   logger: LogWriter
 }
 
@@ -167,12 +167,12 @@ async function verifyCloudBaseVerificationCode(
   }
 }
 
-function getLatestVerificationCode(
-  database: DatabaseSync,
+async function getLatestVerificationCode(
+  database: Database,
   phone: string,
   purpose: VerificationPurpose,
 ) {
-  return database
+  return (await database
     .prepare(
       `
         SELECT id, code, expires_at, used_at
@@ -182,7 +182,7 @@ function getLatestVerificationCode(
         LIMIT 1
       `,
     )
-    .get(phone, purpose) as VerificationRecord | undefined
+    .get(phone, purpose)) as VerificationRecord | undefined
 }
 
 async function assertVerificationCode(
@@ -229,7 +229,7 @@ async function createSessionTokens(reply: FastifyReply, context: AuthRouteContex
   const now = new Date()
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-  context.database
+  await context.database
     .prepare(
       `
         INSERT INTO auth_sessions (
@@ -258,7 +258,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
           }
     const expiresAt = new Date(now.getTime() + issued.expiresIn * 1000)
 
-    context.database
+    await context.database
       .prepare(
         `
           INSERT INTO verification_codes (id, phone, purpose, code, expires_at, used_at, created_at)
@@ -301,21 +301,21 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     const payload = studentRegisterSchema.parse(request.body)
     const verification = await assertVerificationCode(
       context,
-      getLatestVerificationCode(context.database, payload.phone, 'register'),
+      await getLatestVerificationCode(context.database, payload.phone, 'register'),
       payload.verificationCode,
     )
 
-    const phoneOwner = context.database
+    const phoneOwner = (await context.database
       .prepare('SELECT id, role, status FROM users WHERE phone = ? LIMIT 1')
-      .get(payload.phone) as UserIdentityRecord | undefined
+      .get(payload.phone)) as UserIdentityRecord | undefined
 
     if (phoneOwner && (phoneOwner.role !== 'student' || phoneOwner.status !== 'cancelled')) {
       throw new AppError('phone_already_registered', 409, 'PHONE_ALREADY_REGISTERED')
     }
 
-    const studentIdOwner = context.database
+    const studentIdOwner = (await context.database
       .prepare('SELECT id, role, status FROM users WHERE student_no = ? LIMIT 1')
-      .get(payload.studentId) as UserIdentityRecord | undefined
+      .get(payload.studentId)) as UserIdentityRecord | undefined
 
     if (studentIdOwner && (studentIdOwner.role !== 'student' || studentIdOwner.status !== 'cancelled')) {
       throw new AppError('student_id_already_registered', 409, 'STUDENT_ID_ALREADY_REGISTERED')
@@ -338,7 +338,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     }
 
     if (reusableCancelledStudentId) {
-      context.database
+      await context.database
         .prepare(
           `
             UPDATE users
@@ -378,7 +378,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
           'cancelled',
         )
     } else {
-      context.database
+      await context.database
         .prepare(
           `
             INSERT INTO users (
@@ -409,7 +409,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
         )
     }
 
-    context.database
+    await context.database
       .prepare('UPDATE verification_codes SET used_at = ? WHERE id = ?')
       .run(now, verification.id)
 
@@ -439,7 +439,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
 
   app.post('/login', async (request, reply) => {
     const payload = loginSchema.parse(request.body)
-    const user = context.database
+    const user = (await context.database
       .prepare(
         `
           SELECT
@@ -449,7 +449,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
           LIMIT 1
         `,
       )
-      .get(payload.phone) as
+      .get(payload.phone)) as
       | {
           id: string
           role: 'student' | 'teacher' | 'officer'
@@ -507,7 +507,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
   app.post('/logout', async (request) => {
     const actor = await requireAuth(request)
 
-    context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(actor.sub)
+    await context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(actor.sub)
 
     context.logger.info('user_logged_out', {
       requestId: request.id,
@@ -529,13 +529,13 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     const payload = passwordForgotSchema.parse(request.body)
     const verification = await assertVerificationCode(
       context,
-      getLatestVerificationCode(context.database, payload.phone, 'reset_password'),
+      await getLatestVerificationCode(context.database, payload.phone, 'reset_password'),
       payload.verificationCode,
     )
 
-    const user = context.database
+    const user = (await context.database
       .prepare('SELECT id, status FROM users WHERE phone = ? LIMIT 1')
-      .get(payload.phone) as { id: string; status: string } | undefined
+      .get(payload.phone)) as { id: string; status: string } | undefined
 
     if (!user || user.status !== 'active') {
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
@@ -544,13 +544,13 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     const now = new Date().toISOString()
     const passwordHash = await hashPassword(payload.newPassword)
 
-    context.database
+    await context.database
       .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
       .run(passwordHash, now, user.id)
-    context.database
+    await context.database
       .prepare('UPDATE verification_codes SET used_at = ? WHERE id = ?')
       .run(now, verification.id)
-    context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(user.id)
+    await context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(user.id)
 
     context.logger.info('password_reset', {
       requestId: request.id,
@@ -572,9 +572,9 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     const actor = await requireAuth(request)
     const payload = passwordChangeSchema.parse(request.body)
 
-    const user = context.database
+    const user = (await context.database
       .prepare('SELECT id, password_hash FROM users WHERE id = ? AND status = ? LIMIT 1')
-      .get(actor.sub, 'active') as { id: string; password_hash: string } | undefined
+      .get(actor.sub, 'active')) as { id: string; password_hash: string } | undefined
 
     if (!user) {
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
@@ -589,10 +589,10 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     const now = new Date().toISOString()
     const passwordHash = await hashPassword(payload.newPassword)
 
-    context.database
+    await context.database
       .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
       .run(passwordHash, now, user.id)
-    context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(user.id)
+    await context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(user.id)
 
     context.logger.info('password_changed', {
       requestId: request.id,
@@ -613,9 +613,9 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     const actor = await requireAuth(request)
     const payload = phoneChangeSchema.parse(request.body)
 
-    const user = context.database
+    const user = (await context.database
       .prepare('SELECT id, phone, status FROM users WHERE id = ? LIMIT 1')
-      .get(actor.sub) as { id: string; phone: string; status: string } | undefined
+      .get(actor.sub)) as { id: string; phone: string; status: string } | undefined
 
     if (!user || user.status !== 'active') {
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
@@ -625,9 +625,9 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
       throw new AppError('old_phone_invalid', 400, 'OLD_PHONE_INVALID')
     }
 
-    const newPhoneOwner = context.database
+    const newPhoneOwner = (await context.database
       .prepare('SELECT id FROM users WHERE phone = ? LIMIT 1')
-      .get(payload.newPhone) as { id: string } | undefined
+      .get(payload.newPhone)) as { id: string } | undefined
 
     if (newPhoneOwner) {
       throw new AppError('phone_already_registered', 409, 'PHONE_ALREADY_REGISTERED')
@@ -635,24 +635,24 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
 
     const oldVerification = await assertVerificationCode(
       context,
-      getLatestVerificationCode(context.database, payload.oldPhone, 'change_phone'),
+      await getLatestVerificationCode(context.database, payload.oldPhone, 'change_phone'),
       payload.oldVerificationCode,
     )
     const newVerification = await assertVerificationCode(
       context,
-      getLatestVerificationCode(context.database, payload.newPhone, 'change_phone'),
+      await getLatestVerificationCode(context.database, payload.newPhone, 'change_phone'),
       payload.newVerificationCode,
     )
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare('UPDATE users SET phone = ?, updated_at = ? WHERE id = ?')
       .run(payload.newPhone, now, user.id)
-    context.database
+    await context.database
       .prepare('UPDATE verification_codes SET used_at = ? WHERE id IN (?, ?)')
       .run(now, oldVerification.id, newVerification.id)
-    context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(user.id)
+    await context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(user.id)
 
     context.logger.info('phone_changed', {
       requestId: request.id,
@@ -680,7 +680,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
     const actor = await requireAuth(request)
     const now = new Date().toISOString()
 
-    const result = context.database
+    const result = await context.database
       .prepare('UPDATE users SET status = ?, updated_at = ? WHERE id = ? AND status = ?')
       .run('cancelled', now, actor.sub, 'active')
 
@@ -688,7 +688,7 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
     }
 
-    context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(actor.sub)
+    await context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(actor.sub)
 
     context.logger.info('account_cancelled', {
       requestId: request.id,

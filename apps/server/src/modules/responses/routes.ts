@@ -1,15 +1,15 @@
-import type { DatabaseSync } from 'node:sqlite'
 import type { FastifyInstance } from 'fastify'
 import { nanoid } from 'nanoid'
 
 import { responseSchema } from '../../../../../packages/shared/src/index'
 
+import type { Database } from '../../lib/db/client'
 import type { LogWriter } from '../../lib/logging'
 import { requireRole } from '../../lib/guards'
 import { AppError, sendCreated } from '../../lib/http'
 
 interface ResponseRouteContext {
-  database: DatabaseSync
+  database: Database
   logger: LogWriter
 }
 
@@ -35,8 +35,8 @@ function toResponse(row: ResponseRow) {
   }
 }
 
-function getResponseById(database: DatabaseSync, responseId: string) {
-  return database
+async function getResponseById(database: Database, responseId: string) {
+  return (await database
     .prepare(
       `
         SELECT id, feedback_id, teacher_id, content, created_at, updated_at, edited_at
@@ -45,7 +45,7 @@ function getResponseById(database: DatabaseSync, responseId: string) {
         LIMIT 1
       `,
     )
-    .get(responseId) as ResponseRow | undefined
+    .get(responseId)) as ResponseRow | undefined
 }
 
 export function registerResponseRoutes(app: FastifyInstance, context: ResponseRouteContext) {
@@ -54,7 +54,7 @@ export function registerResponseRoutes(app: FastifyInstance, context: ResponseRo
     const params = request.params as { feedbackId: string }
     const payload = responseSchema.parse(request.body)
 
-    const feedback = context.database
+    const feedback = (await context.database
       .prepare(
         `
           SELECT
@@ -67,7 +67,7 @@ export function registerResponseRoutes(app: FastifyInstance, context: ResponseRo
           LIMIT 1
         `,
       )
-      .get(params.feedbackId) as
+      .get(params.feedbackId)) as
       | {
           id: string
           assignment_id: string
@@ -86,7 +86,7 @@ export function registerResponseRoutes(app: FastifyInstance, context: ResponseRo
     const now = new Date().toISOString()
     const responseId = nanoid()
 
-    context.database
+    await context.database
       .prepare(
         `
           INSERT INTO responses (
@@ -123,7 +123,7 @@ export function registerResponseRoutes(app: FastifyInstance, context: ResponseRo
     const actor = await requireRole(request, ['teacher'])
     const params = request.params as { responseId: string }
     const payload = responseSchema.parse(request.body)
-    const response = getResponseById(context.database, params.responseId)
+    const response = await getResponseById(context.database, params.responseId)
 
     if (!response) {
       throw new AppError('response_not_found', 404, 'RESPONSE_NOT_FOUND')
@@ -135,11 +135,11 @@ export function registerResponseRoutes(app: FastifyInstance, context: ResponseRo
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare('UPDATE responses SET content = ?, updated_at = ?, edited_at = ? WHERE id = ?')
       .run(payload.content, now, now, params.responseId)
 
-    const updatedResponse = getResponseById(context.database, params.responseId)
+    const updatedResponse = await getResponseById(context.database, params.responseId)
 
     if (!updatedResponse) {
       throw new AppError('response_not_found', 404, 'RESPONSE_NOT_FOUND')
@@ -166,7 +166,7 @@ export function registerResponseRoutes(app: FastifyInstance, context: ResponseRo
   app.delete('/responses/:responseId', async (request) => {
     const actor = await requireRole(request, ['teacher'])
     const params = request.params as { responseId: string }
-    const response = getResponseById(context.database, params.responseId)
+    const response = await getResponseById(context.database, params.responseId)
 
     if (!response) {
       throw new AppError('response_not_found', 404, 'RESPONSE_NOT_FOUND')
@@ -176,7 +176,7 @@ export function registerResponseRoutes(app: FastifyInstance, context: ResponseRo
       throw new AppError('forbidden', 403, 'FORBIDDEN')
     }
 
-    context.database.prepare('DELETE FROM responses WHERE id = ?').run(params.responseId)
+    await context.database.prepare('DELETE FROM responses WHERE id = ?').run(params.responseId)
 
     context.logger.info('response_deleted', {
       requestId: request.id,

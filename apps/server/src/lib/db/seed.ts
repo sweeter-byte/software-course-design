@@ -1,13 +1,13 @@
-import type { DatabaseSync } from 'node:sqlite'
-
-import { createDatabase } from './client'
+import { createDatabase, type Database } from './client'
 import { resolveAppConfig } from '../config'
 import { hashPassword } from '../security'
 
-export async function seedDemoData(database: DatabaseSync) {
-  const countRow = database.prepare('SELECT COUNT(*) AS count FROM users').get() as { count: number }
+export async function seedDemoData(database: Database) {
+  const countRow = (await database.prepare('SELECT COUNT(*) AS count FROM users').get()) as
+    | { count: number }
+    | undefined
 
-  if (countRow.count > 0) {
+  if (countRow && countRow.count > 0) {
     return
   }
 
@@ -24,7 +24,7 @@ export async function seedDemoData(database: DatabaseSync) {
     )
   `)
 
-  insertUser.run(
+  await insertUser.run(
     'teacher-demo-001',
     'teacher',
     'active',
@@ -43,7 +43,7 @@ export async function seedDemoData(database: DatabaseSync) {
     now,
   )
 
-  insertUser.run(
+  await insertUser.run(
     'officer-demo-001',
     'officer',
     'active',
@@ -65,7 +65,10 @@ export async function seedDemoData(database: DatabaseSync) {
 
 export async function seedDatabase() {
   const config = resolveAppConfig()
-  const database = createDatabase(config.databasePath)
-  await seedDemoData(database)
-  database.close()
+  const database = await createDatabase(config.databaseConfig)
+  try {
+    await seedDemoData(database)
+  } finally {
+    await database.close()
+  }
 }

@@ -155,9 +155,8 @@ function createCloudBaseVerificationNetworkFailureStub() {
 
 describe('auth verification', () => {
   it('issues a development preview verification code for student registration', async () => {
-    const { buildApp } = await import('../src/app')
+    const { buildApp } = await import('./_helpers/test-app')
     const app = await buildApp({
-      databasePath: ':memory:',
       env: 'test',
     })
 
@@ -186,9 +185,8 @@ describe('auth verification', () => {
   })
 
   it('registers a student after a valid verification code is issued', async () => {
-    const { buildApp } = await import('../src/app')
+    const { buildApp } = await import('./_helpers/test-app')
     const app = await buildApp({
-      databasePath: ':memory:',
       env: 'test',
     })
 
@@ -239,9 +237,8 @@ describe('auth verification', () => {
     const cloudBase = createCloudBaseVerificationStub()
 
     try {
-      const { buildApp } = await import('../src/app')
+      const { buildApp } = await import('./_helpers/test-app')
       const app = await buildApp({
-        databasePath: ':memory:',
         env: 'test',
         verificationProvider: 'cloudbase',
         cloudBaseApiBaseUrl: cloudBase.baseUrl,
@@ -321,9 +318,8 @@ describe('auth verification', () => {
     const cloudBase = createCloudBaseInvalidCodeStub()
 
     try {
-      const { buildApp } = await import('../src/app')
+      const { buildApp } = await import('./_helpers/test-app')
       const app = await buildApp({
-        databasePath: ':memory:',
         env: 'test',
         verificationProvider: 'cloudbase',
         cloudBaseApiBaseUrl: cloudBase.baseUrl,
@@ -372,9 +368,8 @@ describe('auth verification', () => {
     const cloudBase = createCloudBaseVerificationNetworkFailureStub()
 
     try {
-      const { buildApp } = await import('../src/app')
+      const { buildApp } = await import('./_helpers/test-app')
       const app = await buildApp({
-        databasePath: ':memory:',
         env: 'test',
         verificationProvider: 'cloudbase',
         cloudBaseApiBaseUrl: cloudBase.baseUrl,
@@ -420,9 +415,8 @@ describe('auth verification', () => {
   })
 
   it('logs a registered student in with phone and password', async () => {
-    const { buildApp } = await import('../src/app')
+    const { buildApp } = await import('./_helpers/test-app')
     const app = await buildApp({
-      databasePath: ':memory:',
       env: 'test',
     })
 
@@ -479,9 +473,8 @@ describe('auth verification', () => {
   })
 
   it('logs seeded officer accounts in for management flows', async () => {
-    const { buildApp } = await import('../src/app')
+    const { buildApp } = await import('./_helpers/test-app')
     const app = await buildApp({
-      databasePath: ':memory:',
       env: 'test',
       seedDemoData: true,
     })

@@ -1,4 +1,3 @@
-import type { DatabaseSync } from 'node:sqlite'
 import type { FastifyInstance } from 'fastify'
 import { nanoid } from 'nanoid'
 
@@ -8,12 +7,13 @@ import {
   assignmentUpdateSchema,
 } from '../../../../../packages/shared/src/index'
 
+import type { Database } from '../../lib/db/client'
 import type { LogWriter } from '../../lib/logging'
 import { requireAuth, requireRole } from '../../lib/guards'
 import { AppError, sendCreated } from '../../lib/http'
 
 interface AssignmentRouteContext {
-  database: DatabaseSync
+  database: Database
   logger: LogWriter
 }
 
@@ -45,7 +45,7 @@ function toAssignment(row: AssignmentRow) {
   }
 }
 
-function assertAssignmentEditable(database: DatabaseSync, assignment: AssignmentRow) {
+async function assertAssignmentEditable(database: Database, assignment: AssignmentRow) {
   const now = Date.now()
   const currentDueAt = new Date(assignment.due_at).getTime()
 
@@ -53,7 +53,7 @@ function assertAssignmentEditable(database: DatabaseSync, assignment: Assignment
     throw new AppError('assignment_deadline_passed', 409, 'ASSIGNMENT_DEADLINE_PASSED')
   }
 
-  const submissionCount = database
+  const submissionCount = (await database
     .prepare(
       `
         SELECT COUNT(*) AS count
@@ -61,15 +61,15 @@ function assertAssignmentEditable(database: DatabaseSync, assignment: Assignment
         WHERE assignment_id = ?
       `,
     )
-    .get(assignment.id) as { count: number }
+    .get(assignment.id)) as { count: number }
 
   if (submissionCount.count > 0) {
     throw new AppError('assignment_already_submitted', 409, 'ASSIGNMENT_ALREADY_SUBMITTED')
   }
 }
 
-function getAssignmentById(database: DatabaseSync, assignmentId: string) {
-  return database
+async function getAssignmentById(database: Database, assignmentId: string) {
+  return (await database
     .prepare(
       `
         SELECT
@@ -88,7 +88,7 @@ function getAssignmentById(database: DatabaseSync, assignmentId: string) {
         LIMIT 1
       `,
     )
-    .get(assignmentId) as AssignmentRow | undefined
+    .get(assignmentId)) as AssignmentRow | undefined
 }
 
 export function registerAssignmentRoutes(app: FastifyInstance, context: AssignmentRouteContext) {
@@ -96,7 +96,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
     const actor = await requireAuth(request)
     const params = request.params as { courseId: string }
 
-    const course = context.database
+    const course = (await context.database
       .prepare(
         `
           SELECT id, teacher_id
@@ -105,7 +105,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
           LIMIT 1
         `,
       )
-      .get(params.courseId) as { id: string; teacher_id: string } | undefined
+      .get(params.courseId)) as { id: string; teacher_id: string } | undefined
 
     if (!course) {
       throw new AppError('course_not_found', 404, 'COURSE_NOT_FOUND')
@@ -116,7 +116,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
     }
 
     if (actor.role === 'student') {
-      const enrollment = context.database
+      const enrollment = (await context.database
         .prepare(
           `
             SELECT id
@@ -125,14 +125,14 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
             LIMIT 1
           `,
         )
-        .get(params.courseId, actor.sub) as { id: string } | undefined
+        .get(params.courseId, actor.sub)) as { id: string } | undefined
 
       if (!enrollment) {
         throw new AppError('forbidden', 403, 'FORBIDDEN')
       }
     }
 
-    const items = context.database
+    const items = (await context.database
       .prepare(
         `
           SELECT
@@ -151,7 +151,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
           ORDER BY created_at DESC
         `,
       )
-      .all(params.courseId) as AssignmentRow[]
+      .all(params.courseId)) as AssignmentRow[]
 
     const assignmentItems = items.map(toAssignment)
 
@@ -169,7 +169,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
     }
 
     const placeholders = items.map(() => '?').join(', ')
-    const studentSubmissions = context.database
+    const studentSubmissions = (await context.database
       .prepare(
         `
           SELECT
@@ -186,7 +186,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
           WHERE student_id = ? AND assignment_id IN (${placeholders})
         `,
       )
-      .all(actor.sub, ...items.map((item) => item.id)) as Array<{
+      .all(actor.sub, ...items.map((item) => item.id))) as Array<{
       id: string
       assignment_id: string
       student_id: string
@@ -238,7 +238,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
     const params = request.params as { courseId: string }
     const payload = assignmentDraftSchema.parse(request.body)
 
-    const course = context.database
+    const course = (await context.database
       .prepare(
         `
           SELECT id, teacher_id
@@ -247,7 +247,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
           LIMIT 1
         `,
       )
-      .get(params.courseId) as { id: string; teacher_id: string } | undefined
+      .get(params.courseId)) as { id: string; teacher_id: string } | undefined
 
     if (!course) {
       throw new AppError('course_not_found', 404, 'COURSE_NOT_FOUND')
@@ -260,7 +260,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
     const now = new Date().toISOString()
     const assignmentId = nanoid()
 
-    context.database
+    await context.database
       .prepare(
         `
           INSERT INTO assignments (
@@ -315,7 +315,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
     const actor = await requireRole(request, ['teacher'])
     const params = request.params as { assignmentId: string }
     const payload = assignmentUpdateSchema.parse(request.body)
-    const assignment = getAssignmentById(context.database, params.assignmentId)
+    const assignment = await getAssignmentById(context.database, params.assignmentId)
 
     if (!assignment) {
       throw new AppError('assignment_not_found', 404, 'ASSIGNMENT_NOT_FOUND')
@@ -329,7 +329,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
       throw new AppError('assignment_cancelled', 409, 'ASSIGNMENT_CANCELLED')
     }
 
-    assertAssignmentEditable(context.database, assignment)
+    await assertAssignmentEditable(context.database, assignment)
 
     const now = new Date().toISOString()
     const nextAssignment = {
@@ -340,7 +340,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
       dueAt: payload.dueAt ?? assignment.due_at,
     }
 
-    context.database
+    await context.database
       .prepare(
         `
           UPDATE assignments
@@ -358,7 +358,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
         params.assignmentId,
       )
 
-    const updatedAssignment = getAssignmentById(context.database, params.assignmentId)
+    const updatedAssignment = await getAssignmentById(context.database, params.assignmentId)
 
     if (!updatedAssignment) {
       throw new AppError('assignment_not_found', 404, 'ASSIGNMENT_NOT_FOUND')
@@ -386,7 +386,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
     const actor = await requireRole(request, ['teacher'])
     const params = request.params as { assignmentId: string }
     const payload = assignmentCancelSchema.parse(request.body)
-    const assignment = getAssignmentById(context.database, params.assignmentId)
+    const assignment = await getAssignmentById(context.database, params.assignmentId)
 
     if (!assignment) {
       throw new AppError('assignment_not_found', 404, 'ASSIGNMENT_NOT_FOUND')
@@ -398,8 +398,8 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
 
     const now = new Date().toISOString()
 
-    context.database.prepare('DELETE FROM submissions WHERE assignment_id = ?').run(params.assignmentId)
-    context.database
+    await context.database.prepare('DELETE FROM submissions WHERE assignment_id = ?').run(params.assignmentId)
+    await context.database
       .prepare(
         `
           UPDATE assignments
@@ -409,7 +409,7 @@ export function registerAssignmentRoutes(app: FastifyInstance, context: Assignme
       )
       .run(payload.reason, now, params.assignmentId)
 
-    const cancelledAssignment = getAssignmentById(context.database, params.assignmentId)
+    const cancelledAssignment = await getAssignmentById(context.database, params.assignmentId)
 
     if (!cancelledAssignment) {
       throw new AppError('assignment_not_found', 404, 'ASSIGNMENT_NOT_FOUND')

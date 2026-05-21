@@ -1,4 +1,3 @@
-import type { DatabaseSync } from 'node:sqlite'
 import type { FastifyInstance } from 'fastify'
 
 import {
@@ -7,11 +6,12 @@ import {
   userStatusUpdateSchema,
 } from '../../../../../packages/shared/src/index'
 
+import type { Database } from '../../lib/db/client'
 import { requireAuth, requireRole } from '../../lib/guards'
 import { AppError } from '../../lib/http'
 
 interface UserRouteContext {
-  database: DatabaseSync
+  database: Database
 }
 
 type UserRow = {
@@ -52,8 +52,8 @@ function toUserProfile(row: UserRow) {
   }
 }
 
-function getCurrentUser(database: DatabaseSync, userId: string) {
-  return database
+async function getCurrentUser(database: Database, userId: string) {
+  return (await database
     .prepare(
       `
         SELECT
@@ -64,13 +64,13 @@ function getCurrentUser(database: DatabaseSync, userId: string) {
         LIMIT 1
       `,
     )
-    .get(userId) as UserRow | undefined
+    .get(userId)) as UserRow | undefined
 }
 
 export function registerUserRoutes(app: FastifyInstance, context: UserRouteContext) {
   app.get('/me', async (request) => {
     const actor = await requireAuth(request)
-    const user = getCurrentUser(context.database, actor.sub)
+    const user = await getCurrentUser(context.database, actor.sub)
 
     if (!user || user.status !== 'active') {
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
@@ -91,7 +91,7 @@ export function registerUserRoutes(app: FastifyInstance, context: UserRouteConte
   app.patch('/me', async (request) => {
     const actor = await requireAuth(request)
     const payload = profileUpdateSchema.parse(request.body)
-    const currentUser = getCurrentUser(context.database, actor.sub)
+    const currentUser = await getCurrentUser(context.database, actor.sub)
 
     if (!currentUser || currentUser.status !== 'active') {
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
@@ -108,7 +108,7 @@ export function registerUserRoutes(app: FastifyInstance, context: UserRouteConte
       className: payload.className === undefined ? currentUser.class_name : payload.className,
     }
 
-    context.database
+    await context.database
       .prepare(
         `
           UPDATE users
@@ -129,7 +129,7 @@ export function registerUserRoutes(app: FastifyInstance, context: UserRouteConte
         actor.sub,
       )
 
-    const updatedUser = getCurrentUser(context.database, actor.sub)
+    const updatedUser = await getCurrentUser(context.database, actor.sub)
 
     if (!updatedUser) {
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
@@ -153,7 +153,7 @@ export function registerUserRoutes(app: FastifyInstance, context: UserRouteConte
 
     const rows = (
       query.role
-        ? context.database
+        ? await context.database
             .prepare(
               `
                 SELECT
@@ -166,7 +166,7 @@ export function registerUserRoutes(app: FastifyInstance, context: UserRouteConte
               `,
             )
             .all(query.role)
-        : context.database
+        : await context.database
             .prepare(
               `
                 SELECT
@@ -201,9 +201,9 @@ export function registerUserRoutes(app: FastifyInstance, context: UserRouteConte
       throw new AppError('cannot_modify_self', 400, 'CANNOT_MODIFY_SELF')
     }
 
-    const target = context.database
+    const target = (await context.database
       .prepare('SELECT id, status FROM users WHERE id = ? LIMIT 1')
-      .get(params.userId) as { id: string; status: 'active' | 'cancelled' | 'disabled' } | undefined
+      .get(params.userId)) as { id: string; status: 'active' | 'cancelled' | 'disabled' } | undefined
 
     if (!target) {
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
@@ -216,7 +216,7 @@ export function registerUserRoutes(app: FastifyInstance, context: UserRouteConte
     const nextStatus: 'active' | 'disabled' = payload.disabled ? 'disabled' : 'active'
 
     if (target.status === nextStatus) {
-      const unchanged = getCurrentUser(context.database, target.id)
+      const unchanged = await getCurrentUser(context.database, target.id)
       if (!unchanged) {
         throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
       }
@@ -234,15 +234,15 @@ export function registerUserRoutes(app: FastifyInstance, context: UserRouteConte
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare('UPDATE users SET status = ?, updated_at = ? WHERE id = ?')
       .run(nextStatus, now, target.id)
 
     if (nextStatus === 'disabled') {
-      context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(target.id)
+      await context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(target.id)
     }
 
-    const updated = getCurrentUser(context.database, target.id)
+    const updated = await getCurrentUser(context.database, target.id)
 
     if (!updated) {
       throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')

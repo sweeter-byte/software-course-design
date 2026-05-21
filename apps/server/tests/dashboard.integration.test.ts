@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 describe('dashboard summaries', () => {
   it('returns an officer dashboard summary with core counters', async () => {
-    const { buildApp } = await import('../src/app')
+    const { buildApp } = await import('./_helpers/test-app')
     const app = await buildApp({
-      databasePath: ':memory:',
       env: 'test',
       seedDemoData: true,
     })

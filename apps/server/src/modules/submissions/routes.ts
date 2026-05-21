@@ -1,4 +1,3 @@
-import type { DatabaseSync } from 'node:sqlite'
 import type { FastifyInstance } from 'fastify'
 import { nanoid } from 'nanoid'
 
@@ -7,12 +6,13 @@ import {
   submissionSchema,
 } from '../../../../../packages/shared/src/index'
 
+import type { Database } from '../../lib/db/client'
 import type { LogWriter } from '../../lib/logging'
 import { requireAuth, requireRole } from '../../lib/guards'
 import { AppError, sendCreated } from '../../lib/http'
 
 interface SubmissionRouteContext {
-  database: DatabaseSync
+  database: Database
   logger: LogWriter
 }
 
@@ -53,8 +53,8 @@ function toSubmission(row: SubmissionDetailRow) {
   }
 }
 
-function getSubmissionDetail(database: DatabaseSync, submissionId: string) {
-  return database
+async function getSubmissionDetail(database: Database, submissionId: string) {
+  return (await database
     .prepare(
       `
         SELECT
@@ -81,7 +81,7 @@ function getSubmissionDetail(database: DatabaseSync, submissionId: string) {
         LIMIT 1
       `,
     )
-    .get(submissionId) as SubmissionDetailRow | undefined
+    .get(submissionId)) as SubmissionDetailRow | undefined
 }
 
 export function registerSubmissionRoutes(app: FastifyInstance, context: SubmissionRouteContext) {
@@ -89,7 +89,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
     const actor = await requireAuth(request)
     const params = request.params as { assignmentId: string }
 
-    const assignment = context.database
+    const assignment = (await context.database
       .prepare(
         `
           SELECT id, teacher_id
@@ -98,7 +98,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
           LIMIT 1
         `,
       )
-      .get(params.assignmentId) as { id: string; teacher_id: string } | undefined
+      .get(params.assignmentId)) as { id: string; teacher_id: string } | undefined
 
     if (!assignment) {
       throw new AppError('assignment_not_found', 404, 'ASSIGNMENT_NOT_FOUND')
@@ -112,7 +112,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
       throw new AppError('forbidden', 403, 'FORBIDDEN')
     }
 
-    const items = context.database
+    const items = (await context.database
       .prepare(
         `
           SELECT
@@ -133,7 +133,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
           ORDER BY submissions.submitted_at IS NULL, submissions.submitted_at DESC
         `,
       )
-      .all(params.assignmentId) as Array<{
+      .all(params.assignmentId)) as Array<{
       id: string
       assignment_id: string
       student_id: string
@@ -176,7 +176,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
     const params = request.params as { assignmentId: string }
     const payload = submissionSchema.parse(request.body)
 
-    const assignment = context.database
+    const assignment = (await context.database
       .prepare(
         `
           SELECT id, course_id, due_at, status
@@ -185,7 +185,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
           LIMIT 1
         `,
       )
-      .get(params.assignmentId) as
+      .get(params.assignmentId)) as
       | {
           id: string
           course_id: string
@@ -206,7 +206,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
       throw new AppError('assignment_deadline_passed', 409, 'ASSIGNMENT_DEADLINE_PASSED')
     }
 
-    const enrollment = context.database
+    const enrollment = (await context.database
       .prepare(
         `
           SELECT id
@@ -215,14 +215,14 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
           LIMIT 1
         `,
       )
-      .get(assignment.course_id, actor.sub) as { id: string } | undefined
+      .get(assignment.course_id, actor.sub)) as { id: string } | undefined
 
     if (!enrollment) {
       throw new AppError('course_enrollment_required', 403, 'COURSE_ENROLLMENT_REQUIRED')
     }
 
     const now = new Date().toISOString()
-    const existingSubmission = context.database
+    const existingSubmission = (await context.database
       .prepare(
         `
           SELECT id, status
@@ -231,7 +231,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
           LIMIT 1
         `,
       )
-      .get(params.assignmentId, actor.sub) as { id: string; status: string } | undefined
+      .get(params.assignmentId, actor.sub)) as { id: string; status: string } | undefined
 
     if (existingSubmission?.status === 'graded') {
       throw new AppError('submission_already_graded', 409, 'SUBMISSION_ALREADY_GRADED')
@@ -240,7 +240,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
     const submissionId = existingSubmission?.id ?? nanoid()
 
     if (existingSubmission) {
-      context.database
+      await context.database
         .prepare(
           `
             UPDATE submissions
@@ -250,7 +250,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
         )
         .run(payload.content, now, now, submissionId)
     } else {
-      context.database
+      await context.database
         .prepare(
           `
             INSERT INTO submissions (
@@ -301,7 +301,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
   app.get('/submissions/:submissionId', async (request) => {
     const actor = await requireAuth(request)
     const params = request.params as { submissionId: string }
-    const submission = getSubmissionDetail(context.database, params.submissionId)
+    const submission = await getSubmissionDetail(context.database, params.submissionId)
 
     if (!submission) {
       throw new AppError('submission_not_found', 404, 'SUBMISSION_NOT_FOUND')
@@ -331,7 +331,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
     const actor = await requireRole(request, ['student'])
     const params = request.params as { submissionId: string }
     const payload = submissionSchema.parse(request.body)
-    const submission = getSubmissionDetail(context.database, params.submissionId)
+    const submission = await getSubmissionDetail(context.database, params.submissionId)
 
     if (!submission) {
       throw new AppError('submission_not_found', 404, 'SUBMISSION_NOT_FOUND')
@@ -355,7 +355,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare(
         `
           UPDATE submissions
@@ -365,7 +365,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
       )
       .run(payload.content, now, now, params.submissionId)
 
-    const updatedSubmission = getSubmissionDetail(context.database, params.submissionId)
+    const updatedSubmission = await getSubmissionDetail(context.database, params.submissionId)
 
     if (!updatedSubmission) {
       throw new AppError('submission_not_found', 404, 'SUBMISSION_NOT_FOUND')
@@ -395,7 +395,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
     const params = request.params as { submissionId: string }
     const payload = submissionGradeSchema.parse(request.body)
 
-    const submission = context.database
+    const submission = (await context.database
       .prepare(
         `
           SELECT
@@ -408,7 +408,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
           LIMIT 1
         `,
       )
-      .get(params.submissionId) as
+      .get(params.submissionId)) as
       | {
           id: string
           assignment_id: string
@@ -426,7 +426,7 @@ export function registerSubmissionRoutes(app: FastifyInstance, context: Submissi
 
     const now = new Date().toISOString()
 
-    context.database
+    await context.database
       .prepare(
         `
           UPDATE submissions

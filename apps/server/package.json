@@ -19,6 +19,7 @@
     "@fastify/jwt": "latest",
     "bcryptjs": "latest",
     "fastify": "latest",
+    "mysql2": "^3.22.3",
     "nanoid": "latest",
     "zod": "^3.23.8"
   },
