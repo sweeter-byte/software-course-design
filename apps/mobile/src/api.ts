@@ -1,15 +1,26 @@
-export type UserRole = 'student' | 'teacher' | 'officer'
+import type {
+  AdminUserItem,
+  AssignmentItem,
+  CourseFeedbackDimension,
+  CourseFeedbackItem,
+  CourseFilters,
+  CourseItem,
+  CourseOptions,
+  FeedbackItem,
+  FeedbackKind,
+  FeedbackThreadFilters,
+  Pagination,
+  SessionUser,
+  SubmissionItem,
+  UserRole,
+} from './domain'
+
+export type { UserRole } from './domain'
 
 export interface SessionPayload {
   accessToken: string
   refreshToken?: string
-  user: {
-    id: string
-    role: UserRole
-    phone: string
-    username: string
-    realName: string
-  }
+  user: SessionUser
 }
 
 type RequestOptions = {
@@ -18,13 +29,27 @@ type RequestOptions = {
   body?: unknown
 }
 
+export type ValidationIssue = {
+  path: Array<string | number>
+  message: string
+  code?: string
+}
+
 export class ApiError extends Error {
   statusCode: number
+  code?: string
+  details?: ValidationIssue[]
 
-  constructor(message: string, statusCode: number) {
+  constructor(
+    message: string,
+    statusCode: number,
+    options?: { code?: string; details?: ValidationIssue[] },
+  ) {
     super(message)
     this.name = 'ApiError'
     this.statusCode = statusCode
+    this.code = options?.code
+    this.details = options?.details
   }
 }
 
@@ -42,10 +67,36 @@ async function requestJson<T>(baseUrl: string, path: string, options: RequestOpt
   const payload = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new ApiError(payload.message ?? 'request_failed', response.status)
+    const rawDetails = payload?.error?.details
+    const details = Array.isArray(rawDetails)
+      ? (rawDetails.filter(
+          (item): item is ValidationIssue =>
+            typeof item === 'object' &&
+            item !== null &&
+            Array.isArray((item as ValidationIssue).path) &&
+            typeof (item as ValidationIssue).message === 'string',
+        ) as ValidationIssue[])
+      : undefined
+
+    throw new ApiError(payload.message ?? 'request_failed', response.status, {
+      code: typeof payload?.error?.code === 'string' ? payload.error.code : undefined,
+      details,
+    })
   }
 
   return payload.data as T
+}
+
+function nullableText(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? ''
+  return trimmed ? trimmed : null
+}
+
+function appendDefinedParams(params: URLSearchParams, values: Record<string, string | number | undefined>) {
+  Object.entries(values).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    params.set(key, String(value))
+  })
 }
 
 export const api = {
@@ -74,12 +125,24 @@ export const api = {
       username: string
       realName: string
       studentId: string
+      email?: string | null
+      gender?: string | null
+      college?: string | null
+      major?: string | null
+      className?: string | null
       verificationCode: string
     },
   ) {
     return requestJson<{ user: { id: string } }>(baseUrl, '/auth/register/student', {
       method: 'POST',
-      body,
+      body: {
+        ...body,
+        email: nullableText(body.email),
+        gender: nullableText(body.gender),
+        college: nullableText(body.college),
+        major: nullableText(body.major),
+        className: nullableText(body.className),
+      },
     })
   },
   logout(baseUrl: string, token: string) {
@@ -127,15 +190,20 @@ export const api = {
       newVerificationCode: string
     },
   ) {
-    return requestJson<{ user: Record<string, unknown> }>(baseUrl, '/auth/phone/change', {
+    return requestJson<{ user: SessionUser }>(baseUrl, '/auth/phone/change', {
       method: 'POST',
       token,
       body,
     })
   },
   cancelAccount(baseUrl: string, token: string) {
-    return requestJson<{ user: Record<string, unknown> }>(baseUrl, '/auth/cancel-account', {
+    return requestJson<{ user: SessionUser }>(baseUrl, '/auth/cancel-account', {
       method: 'POST',
+      token,
+    })
+  },
+  getCurrentUser(baseUrl: string, token: string) {
+    return requestJson<{ user: SessionUser }>(baseUrl, '/users/me', {
       token,
     })
   },
@@ -152,21 +220,38 @@ export const api = {
       className?: string | null
     },
   ) {
-    return requestJson<{ user: Record<string, unknown> }>(baseUrl, '/users/me', {
+    return requestJson<{ user: SessionUser }>(baseUrl, '/users/me', {
       method: 'PATCH',
       token,
       body,
     })
   },
   getDashboard(baseUrl: string, token: string, role: UserRole) {
-    return requestJson<{ summary: Record<string, number> }>(baseUrl, `/dashboard/${role}`, { token })
+    return requestJson<{ summary: Record<string, number> }>(baseUrl, `/dashboard/${role}`, {
+      token,
+    })
   },
-  listCourses(baseUrl: string, token: string, keyword: string) {
-    const query = keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''
-    return requestJson<{ items: Array<Record<string, unknown>> }>(baseUrl, `/courses${query}`, { token })
+  listCourses(baseUrl: string, token: string, filters: string | CourseFilters = {}) {
+    const params = new URLSearchParams()
+
+    if (typeof filters === 'string') {
+      if (filters) params.set('keyword', filters)
+    } else {
+      appendDefinedParams(params, filters)
+    }
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return requestJson<{ items: CourseItem[] }>(baseUrl, `/courses${query}`, {
+      token,
+    })
   },
   getCourse(baseUrl: string, token: string, courseId: string) {
-    return requestJson<{ course: Record<string, unknown> }>(baseUrl, `/courses/${courseId}`, { token })
+    return requestJson<{ course: CourseItem }>(baseUrl, `/courses/${courseId}`, {
+      token,
+    })
+  },
+  listCourseOptions(baseUrl: string, token: string) {
+    return requestJson<CourseOptions>(baseUrl, '/courses/options', { token })
   },
   createCourse(
     baseUrl: string,
@@ -184,7 +269,7 @@ export const api = {
       endDate: string
     },
   ) {
-    return requestJson<{ course: Record<string, unknown> }>(baseUrl, '/courses', {
+    return requestJson<{ course: CourseItem }>(baseUrl, '/courses', {
       method: 'POST',
       token,
       body,
@@ -208,14 +293,14 @@ export const api = {
       status: string
     }>,
   ) {
-    return requestJson<{ course: Record<string, unknown> }>(baseUrl, `/courses/${courseId}`, {
+    return requestJson<{ course: CourseItem }>(baseUrl, `/courses/${courseId}`, {
       method: 'PATCH',
       token,
       body,
     })
   },
   deleteCourse(baseUrl: string, token: string, courseId: string) {
-    return requestJson<{ course: Record<string, unknown> }>(baseUrl, `/courses/${courseId}`, {
+    return requestJson<{ course: CourseItem }>(baseUrl, `/courses/${courseId}`, {
       method: 'DELETE',
       token,
     })
@@ -227,7 +312,7 @@ export const api = {
     })
   },
   listAssignments(baseUrl: string, token: string, courseId: string) {
-    return requestJson<{ items: Array<Record<string, unknown>> }>(
+    return requestJson<{ items: AssignmentItem[] }>(
       baseUrl,
       `/courses/${courseId}/assignments`,
       { token },
@@ -245,7 +330,7 @@ export const api = {
       dueAt: string
     },
   ) {
-    return requestJson<{ assignment: Record<string, unknown> }>(
+    return requestJson<{ assignment: AssignmentItem }>(
       baseUrl,
       `/courses/${courseId}/assignments`,
       {
@@ -267,7 +352,7 @@ export const api = {
       dueAt: string
     }>,
   ) {
-    return requestJson<{ assignment: Record<string, unknown> }>(
+    return requestJson<{ assignment: AssignmentItem }>(
       baseUrl,
       `/assignments/${assignmentId}`,
       {
@@ -278,7 +363,7 @@ export const api = {
     )
   },
   cancelAssignment(baseUrl: string, token: string, assignmentId: string, reason: string) {
-    return requestJson<{ assignment: Record<string, unknown> }>(
+    return requestJson<{ assignment: AssignmentItem }>(
       baseUrl,
       `/assignments/${assignmentId}/cancel`,
       {
@@ -289,14 +374,14 @@ export const api = {
     )
   },
   listSubmissions(baseUrl: string, token: string, assignmentId: string) {
-    return requestJson<{ items: Array<Record<string, unknown>> }>(
+    return requestJson<{ items: SubmissionItem[] }>(
       baseUrl,
       `/assignments/${assignmentId}/submissions`,
       { token },
     )
   },
   createSubmission(baseUrl: string, token: string, assignmentId: string, content: string) {
-    return requestJson<{ submission: Record<string, unknown> }>(
+    return requestJson<{ submission: SubmissionItem }>(
       baseUrl,
       `/assignments/${assignmentId}/submissions`,
       {
@@ -307,14 +392,14 @@ export const api = {
     )
   },
   getSubmission(baseUrl: string, token: string, submissionId: string) {
-    return requestJson<{ submission: Record<string, unknown> }>(
+    return requestJson<{ submission: SubmissionItem }>(
       baseUrl,
       `/submissions/${submissionId}`,
       { token },
     )
   },
   updateSubmission(baseUrl: string, token: string, submissionId: string, content: string) {
-    return requestJson<{ submission: Record<string, unknown> }>(
+    return requestJson<{ submission: SubmissionItem }>(
       baseUrl,
       `/submissions/${submissionId}`,
       {
@@ -324,8 +409,14 @@ export const api = {
       },
     )
   },
-  gradeSubmission(baseUrl: string, token: string, submissionId: string, score: number, teacherFeedback: string) {
-    return requestJson<{ submission: Record<string, unknown> }>(
+  gradeSubmission(
+    baseUrl: string,
+    token: string,
+    submissionId: string,
+    score: number,
+    teacherFeedback: string,
+  ) {
+    return requestJson<{ submission: SubmissionItem }>(
       baseUrl,
       `/submissions/${submissionId}/grade`,
       {
@@ -336,9 +427,24 @@ export const api = {
     )
   },
   listFeedbacks(baseUrl: string, token: string, submissionId: string) {
-    return requestJson<{ items: Array<Record<string, unknown>> }>(
+    return requestJson<{ items: FeedbackItem[] }>(
       baseUrl,
       `/feedbacks?submissionId=${encodeURIComponent(submissionId)}`,
+      { token },
+    )
+  },
+  listFeedbackThreads(
+    baseUrl: string,
+    token: string,
+    filters: FeedbackThreadFilters = {},
+  ) {
+    const params = new URLSearchParams()
+    appendDefinedParams(params, filters)
+
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return requestJson<{ items: FeedbackItem[]; pagination?: Pagination }>(
+      baseUrl,
+      `/feedbacks/threads${query}`,
       { token },
     )
   },
@@ -346,10 +452,10 @@ export const api = {
     baseUrl: string,
     token: string,
     submissionId: string,
-    kind: 'question' | 'feedback',
+    kind: FeedbackKind,
     content: string,
   ) {
-    return requestJson<{ feedback: Record<string, unknown> }>(
+    return requestJson<{ feedback: FeedbackItem }>(
       baseUrl,
       `/submissions/${submissionId}/feedbacks`,
       {
@@ -363,10 +469,10 @@ export const api = {
     baseUrl: string,
     token: string,
     feedbackId: string,
-    kind: 'question' | 'feedback',
+    kind: FeedbackKind,
     content: string,
   ) {
-    return requestJson<{ feedback: Record<string, unknown> }>(
+    return requestJson<{ feedback: FeedbackItem }>(
       baseUrl,
       `/feedbacks/${feedbackId}`,
       {
@@ -377,7 +483,7 @@ export const api = {
     )
   },
   deleteFeedback(baseUrl: string, token: string, feedbackId: string) {
-    return requestJson<{ feedback: Record<string, unknown> }>(
+    return requestJson<{ feedback: FeedbackItem }>(
       baseUrl,
       `/feedbacks/${feedbackId}`,
       {
@@ -420,7 +526,7 @@ export const api = {
   },
   listCourseFeedbacks(baseUrl: string, token: string, courseId?: string) {
     const query = courseId ? `?courseId=${encodeURIComponent(courseId)}` : ''
-    return requestJson<{ items: Array<Record<string, unknown>> }>(baseUrl, `/course-feedbacks${query}`, {
+    return requestJson<{ items: CourseFeedbackItem[] }>(baseUrl, `/course-feedbacks${query}`, {
       token,
     })
   },
@@ -429,11 +535,11 @@ export const api = {
     token: string,
     courseId: string,
     body: {
-      dimension: 'content' | 'method' | 'teaching' | 'gain' | 'other'
+      dimension: CourseFeedbackDimension
       content: string
     },
   ) {
-    return requestJson<{ feedback: Record<string, unknown> }>(
+    return requestJson<{ feedback: CourseFeedbackItem }>(
       baseUrl,
       `/courses/${courseId}/course-feedbacks`,
       {
@@ -448,11 +554,11 @@ export const api = {
     token: string,
     feedbackId: string,
     body: {
-      dimension: 'content' | 'method' | 'teaching' | 'gain' | 'other'
+      dimension: CourseFeedbackDimension
       content: string
     },
   ) {
-    return requestJson<{ feedback: Record<string, unknown> }>(
+    return requestJson<{ feedback: CourseFeedbackItem }>(
       baseUrl,
       `/course-feedbacks/${feedbackId}`,
       {
@@ -463,12 +569,29 @@ export const api = {
     )
   },
   deleteCourseFeedback(baseUrl: string, token: string, feedbackId: string) {
-    return requestJson<{ feedback: Record<string, unknown> }>(
+    return requestJson<{ feedback: CourseFeedbackItem }>(
       baseUrl,
       `/course-feedbacks/${feedbackId}`,
       {
         method: 'DELETE',
         token,
+      },
+    )
+  },
+  listAdminUsers(baseUrl: string, token: string, role?: UserRole) {
+    const query = role ? `?role=${encodeURIComponent(role)}` : ''
+    return requestJson<{ users: AdminUserItem[] }>(baseUrl, `/users${query}`, {
+      token,
+    })
+  },
+  setUserDisabled(baseUrl: string, token: string, userId: string, disabled: boolean) {
+    return requestJson<{ user: AdminUserItem }>(
+      baseUrl,
+      `/users/${userId}/status`,
+      {
+        method: 'PATCH',
+        token,
+        body: { disabled },
       },
     )
   },

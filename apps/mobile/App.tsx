@@ -15,72 +15,16 @@ import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient
 
 import { ApiError, api, type SessionPayload, type UserRole } from './src/api'
 import { createDefaultAssignmentDates } from './src/demo-defaults'
+import type {
+  AssignmentItem,
+  CourseFeedbackItem,
+  CourseItem,
+  FeedbackItem,
+  SubmissionItem,
+} from './src/domain'
 
 const queryClient = new QueryClient()
 const DEFAULT_API_BASE_URL = 'http://localhost:4100/api/v1'
-
-type CourseItem = {
-  id: string
-  courseCode: string
-  courseName: string
-  description: string
-  teacherId: string
-  semester: string
-  location: string
-  scheduleText: string
-  capacity?: number
-  startDate?: string
-  endDate?: string
-  status: string
-}
-
-type AssignmentItem = {
-  id: string
-  courseId: string
-  teacherId: string
-  title: string
-  description: string
-  requirement: string
-  dueAt: string
-  status: string
-  hasSubmitted?: boolean
-  submissionId?: string | null
-}
-
-type SubmissionItem = {
-  id: string
-  assignmentId: string
-  studentId: string
-  content: string
-  status: string
-  score?: number | null
-  teacherFeedback?: string | null
-}
-
-type FeedbackItem = {
-  id: string
-  assignmentId: string
-  submissionId: string
-  kind: 'question' | 'feedback'
-  content: string
-  responses: Array<{
-    id: string
-    feedbackId: string
-    teacherId: string
-    content: string
-  }>
-}
-
-type CourseFeedbackItem = {
-  id: string
-  courseId: string
-  courseName?: string
-  studentId: string
-  teacherId: string
-  dimension: 'content' | 'method' | 'teaching' | 'gain' | 'other'
-  content: string
-  status: string
-}
 
 const roleLabels: Record<UserRole, string> = {
   student: '学生',
@@ -98,7 +42,16 @@ const courseFeedbackDimensionLabels: Record<CourseFeedbackItem['dimension'], str
 
 function extractErrorMessage(error: unknown) {
   if (error instanceof ApiError) {
-    return `${error.message} (${error.statusCode})`
+    const details = error.details
+      ?.map((detail) => {
+        const path = detail.path.length ? `${detail.path.join('.')}: ` : ''
+        return `${path}${detail.message}`
+      })
+      .join('；')
+    const code = error.code ? ` / ${error.code}` : ''
+    return details
+      ? `${error.message}${code} (${error.statusCode})：${details}`
+      : `${error.message}${code} (${error.statusCode})`
   }
 
   if (error instanceof Error) {
@@ -202,7 +155,6 @@ function Workspace() {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null)
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<string | null>(null)
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null)
-  const [joinedCourseIds, setJoinedCourseIds] = useState<string[]>([])
   const [courseDraft, setCourseDraft] = useState({
     courseCode: 'SE-5002',
     courseName: '移动端课程互动',
@@ -555,15 +507,19 @@ function Workspace() {
       return api.enrollCourse(apiBaseUrl, session.accessToken, courseId)
     },
     onSuccess: (_, courseId) => {
-      setJoinedCourseIds((current) => [...new Set([...current, courseId])])
       setSelectedCourseId(courseId)
       setNotice('已加入课程。')
+      queryClient.invalidateQueries({ queryKey: ['mobile-courses'] })
+      queryClient.invalidateQueries({ queryKey: ['mobile-dashboard'] })
     },
-    onError: (error, courseId) => {
+    onError: (error) => {
       const message = extractErrorMessage(error)
-      if (message.includes('ALREADY_ENROLLED') || message.includes('already_enrolled')) {
-        setJoinedCourseIds((current) => [...new Set([...current, courseId])])
+      if (
+        error instanceof ApiError &&
+        (error.code === 'ALREADY_ENROLLED' || error.message === 'already_enrolled')
+      ) {
         setNotice('课程已加入。')
+        queryClient.invalidateQueries({ queryKey: ['mobile-courses'] })
         return
       }
       setNotice(message)
@@ -1130,7 +1086,7 @@ function Workspace() {
                   onPress={() => enrollMutation.mutate(selectedCourseId)}
                 >
                   <Text style={styles.primaryText}>
-                    {joinedCourseIds.includes(selectedCourseId) ? '已加入当前课程' : '加入当前课程'}
+                    {selectedCourse?.enrolled ? '已加入当前课程' : '加入当前课程'}
                   </Text>
                 </Pressable>
               ) : null}
