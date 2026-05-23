@@ -25,7 +25,7 @@ export const SCHEMA_STATEMENTS: string[] = [
     id VARCHAR(36) PRIMARY KEY,
     phone VARCHAR(20) NOT NULL,
     purpose VARCHAR(32) NOT NULL CHECK (purpose IN ('register', 'reset_password', 'change_phone')),
-    code VARCHAR(255) NOT NULL,
+    code TEXT NOT NULL,
     expires_at VARCHAR(40) NOT NULL,
     used_at VARCHAR(40),
     created_at VARCHAR(40) NOT NULL
