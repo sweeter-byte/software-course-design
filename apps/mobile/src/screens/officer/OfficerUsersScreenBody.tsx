@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api } from '../../api'
+import { api, extractErrorMessage } from '../../api'
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
 import type { AdminUserItem, UserRole } from '../../domain'
@@ -61,7 +61,7 @@ export function OfficerUsersScreenBody() {
       )
       queryClient.invalidateQueries({ queryKey: ['mobile-admin-users'] })
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '账号状态更新失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
     onSettled: () => setPendingUserId(null),
   })
 

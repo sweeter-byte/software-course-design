@@ -5,6 +5,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 
 import { RoleScreen } from '../../components/layout/RoleScreen'
 import type { FeedbackItem } from '../../domain'
+import { resetCourseStackTo } from '../../navigation/courseStackNav'
 import type { RoleTabParamList } from '../../navigation/RoleTabs'
 import { useTeacherTaskQueues } from './useTeacherTaskQueues'
 import type { PendingSubmissionTask } from '../dashboard/dashboard-model'
@@ -23,17 +24,26 @@ export function TeacherTasksScreen() {
   const showSubmissions = tab === 'submissions'
 
   const openSubmission = (task: PendingSubmissionTask) => {
-    navigation.navigate('Courses', {
-      screen: 'SubmissionDetail',
-      params: { submissionId: task.submission.id, courseId: task.courseId },
-    })
+    resetCourseStackTo(navigation, [
+      { name: 'CourseList' },
+      { name: 'CourseWorkspace', params: { courseId: task.courseId } },
+      {
+        name: 'SubmissionDetail',
+        params: { submissionId: task.submission.id, courseId: task.courseId },
+      },
+    ])
   }
 
   const openFeedback = (thread: FeedbackItem) => {
-    navigation.navigate('Courses', {
-      screen: 'FeedbackThread',
-      params: { feedbackId: thread.id, courseId: thread.courseId ?? undefined },
-    })
+    const courseId = thread.courseId ?? undefined
+    resetCourseStackTo(navigation, [
+      { name: 'CourseList' },
+      ...(courseId ? [{ name: 'CourseWorkspace' as const, params: { courseId } }] : []),
+      {
+        name: 'FeedbackThread',
+        params: { feedbackId: thread.id, courseId },
+      },
+    ])
   }
 
   return (

@@ -757,10 +757,52 @@ describe('feedback threads', () => {
   it('limits feedback thread overview to the current actor scope', async () => {
     const { app, teacherToken, studentToken, officerToken, courseId, assignmentId, feedbackId } =
       await createFeedbackThread()
+    // requireAuth now cross-checks the JWT's sid against auth_sessions, so a
+    // hand-rolled token also needs a real users row + auth_sessions row to
+    // pass the gate. Insert both directly via the decorated database.
+    const database = (app as unknown as { database: import('../src/lib/db/client').Database })
+      .database
+    const otherTeacherId = 'teacher-not-owner'
+    const otherTeacherSid = 'sid-teacher-not-owner'
+    const now = new Date().toISOString()
+    await database
+      .prepare(
+        `INSERT INTO users (
+          id, role, status, phone, password_hash, username, real_name,
+          email, gender, student_no, teacher_no, college, major, class_name,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        otherTeacherId,
+        'teacher',
+        'active',
+        '13900999000',
+        'unused-hash',
+        'other_teacher',
+        '其他教师',
+        null,
+        null,
+        null,
+        'T999',
+        null,
+        null,
+        null,
+        now,
+        now,
+      )
+    await database
+      .prepare(
+        `INSERT INTO auth_sessions (
+          id, user_id, refresh_token_hash, expires_at, last_seen_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(otherTeacherSid, otherTeacherId, 'unused', now, now, now)
     const otherTeacherToken = app.jwt.sign({
-      sub: 'teacher-not-owner',
+      sub: otherTeacherId,
       role: 'teacher',
       phone: '13900999000',
+      sid: otherTeacherSid,
     })
 
     const teacherResponse = await app.inject({

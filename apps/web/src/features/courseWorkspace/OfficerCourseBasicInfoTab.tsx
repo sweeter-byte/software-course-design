@@ -10,12 +10,12 @@ import { confirmDestructive } from '../../utils/confirm'
 import { extractErrorMessage } from '../../utils/errors'
 import type { CourseWorkspaceOutletContext } from './CourseWorkspace'
 
-const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'not_started', label: '未开始' },
-  { value: 'active', label: '开课中' },
-  { value: 'completed', label: '已结课' },
-  { value: 'suspended', label: '暂停' },
-]
+const STATUS_LABELS: Record<string, string> = {
+  not_started: '未开始',
+  active: '进行中',
+  completed: '已结课',
+  suspended: '已暂停',
+}
 
 interface DraftState {
   courseCode: string
@@ -28,7 +28,6 @@ interface DraftState {
   capacity: string
   startDate: string
   endDate: string
-  status: string
 }
 
 function toDraft(course: CourseItem): DraftState {
@@ -43,7 +42,6 @@ function toDraft(course: CourseItem): DraftState {
     capacity: String(course.capacity),
     startDate: course.startDate ?? '',
     endDate: course.endDate ?? '',
-    status: course.status,
   }
 }
 
@@ -113,6 +111,20 @@ export function OfficerCourseBasicInfoTab() {
       return api.updateCourse(apiBaseUrl, session.accessToken, course.id, {
         ...draft,
         capacity: Number(draft.capacity),
+      })
+    },
+    onSuccess: () => {
+      setError(null)
+      queryClient.invalidateQueries({ queryKey: ['course-detail'] })
+      queryClient.invalidateQueries({ queryKey: ['courses'] })
+    },
+    onError: (error) => setError(extractErrorMessage(error)),
+  })
+
+  const suspendMutation = useMutation({
+    mutationFn: async (suspended: boolean) => {
+      return api.updateCourse(apiBaseUrl, session.accessToken, course.id, {
+        suspended,
       })
     },
     onSuccess: () => {
@@ -282,25 +294,58 @@ export function OfficerCourseBasicInfoTab() {
             </label>
             <label htmlFor="officer-course-status">
               课程状态
-              <select
+              <input
                 id="officer-course-status"
-                value={draft.status}
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, status: event.target.value }))
-                }
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                readOnly
+                value={STATUS_LABELS[course.status] ?? course.status}
+                title="状态由开课日期、结课日期与暂停开关共同决定"
+              />
             </label>
           </div>
           <button className="primary-button" type="submit" disabled={updateMutation.isPending}>
             {updateMutation.isPending ? '保存中...' : '保存修改'}
           </button>
         </form>
+      </article>
+
+      <article className="section-card wide-card">
+        <div className="section-head">
+          <h3>暂停 / 恢复</h3>
+          <p>
+            其他状态（未开始 / 进行中 / 已结课）会根据开课日期、结课日期与今天自动计算。
+            只有"暂停"需要教务员手动开关。
+          </p>
+        </div>
+        <p>
+          当前状态：<strong>{STATUS_LABELS[course.status] ?? course.status}</strong>
+        </p>
+        {course.suspended ? (
+          <button
+            className="primary-button"
+            type="button"
+            disabled={suspendMutation.isPending}
+            onClick={() => {
+              if (confirmDestructive('确认恢复该课程吗？恢复后状态将按时间自动计算。')) {
+                suspendMutation.mutate(false)
+              }
+            }}
+          >
+            {suspendMutation.isPending ? '处理中...' : '恢复课程'}
+          </button>
+        ) : (
+          <button
+            className="danger-button"
+            type="button"
+            disabled={suspendMutation.isPending}
+            onClick={() => {
+              if (confirmDestructive('确认暂停该课程吗？暂停后学生与教师将看到"已暂停"。')) {
+                suspendMutation.mutate(true)
+              }
+            }}
+          >
+            {suspendMutation.isPending ? '处理中...' : '暂停课程'}
+          </button>
+        )}
       </article>
 
       <article className="section-card wide-card">

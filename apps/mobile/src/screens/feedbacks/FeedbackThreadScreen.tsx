@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { api } from '../../api'
+import { api, extractErrorMessage } from '../../api'
 import { NoticeBanner } from '../../components/feedback/NoticeBanner'
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
@@ -36,7 +36,7 @@ function formatDateTimeBrief(value: string | null | undefined) {
 export function FeedbackThreadScreen() {
   const navigation = useNavigation<Nav>()
   const route = useRoute<Route>()
-  const { session, apiBaseUrl, notice, notify } = useMobileAuth()
+  const { session, apiBaseUrl, notice, notify, dismissNotice } = useMobileAuth()
   const queryClient = useQueryClient()
   const role = session.user.role
   const { feedbackId, courseId } = route.params
@@ -104,7 +104,7 @@ export function FeedbackThreadScreen() {
 
   return (
     <Shell title="反馈详情" onBack={() => navigation.goBack()}>
-      <NoticeBanner notice={notice} />
+      <NoticeBanner notice={notice} onDismiss={dismissNotice} />
 
       <ThreadContextCard thread={thread} submission={submissionQuery.data ?? null} />
 
@@ -218,7 +218,7 @@ function StudentBody({
       setEditing(false)
       onChanged()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '修改失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const deleteMutation = useMutation({
@@ -228,7 +228,7 @@ function StudentBody({
       onChanged()
       onDeleted()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '删除失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   function confirmDelete() {
@@ -352,7 +352,7 @@ function TeacherBody({
       setNewResponse('')
       onChanged()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '发布回复失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const updateMutation = useMutation({
@@ -364,7 +364,7 @@ function TeacherBody({
       setEditingContent('')
       onChanged()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '更新回复失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const deleteMutation = useMutation({
@@ -373,7 +373,7 @@ function TeacherBody({
       notify('已删除回复。', 'success')
       onChanged()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '删除回复失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   function confirmDelete(id: string) {

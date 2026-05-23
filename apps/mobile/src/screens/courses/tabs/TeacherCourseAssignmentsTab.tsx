@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { api } from '../../../api'
+import { api, extractErrorMessage } from '../../../api'
 import { useMobileAuth } from '../../../contexts/MobileAuthContext'
 import { createDefaultAssignmentDates } from '../../../demo-defaults'
 import type { AssignmentItem, CourseItem } from '../../../domain'
@@ -79,7 +79,7 @@ export function TeacherCourseAssignmentsTab({ course }: { course: CourseItem }) 
         })
       }
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '发布作业失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   function open(assignment: AssignmentItem) {

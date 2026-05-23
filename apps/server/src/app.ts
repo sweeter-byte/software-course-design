@@ -45,6 +45,11 @@ export async function buildApp(options: BuildAppOptions = {}) {
     secret: config.jwtSecret,
   })
 
+  // Make the database reachable from requireAuth without threading it
+  // through every route closure (used to validate the JWT's session id
+  // against auth_sessions).
+  app.decorate('database', database)
+
   app.addHook('onRequest', async (request) => {
     ;(request as unknown as Record<symbol, number>)[START_TIME] = Date.now()
   })

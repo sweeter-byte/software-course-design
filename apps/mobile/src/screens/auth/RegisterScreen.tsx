@@ -6,6 +6,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
 import { api, extractErrorMessage } from '../../api'
 import { LabeledField } from '../../components/ui/LabeledField'
+import { SegmentedTabs } from '../../components/ui/SegmentedTabs'
 import type { NoticeState, NoticeType } from '../../components/feedback/NoticeBanner'
 import type { AuthStackParamList } from '../../navigation/AuthStack'
 import { AuthScaffold } from './AuthScaffold'
@@ -16,6 +17,7 @@ type Props = {
   apiBaseUrl: string
   notice: NoticeState | null
   notify: (message: string, type?: NoticeType) => void
+  dismissNotice?: () => void
   /**
    * When registration succeeds we prefill the login form with the chosen
    * phone/password so the user can submit immediately after navigating back.
@@ -23,7 +25,19 @@ type Props = {
   onRegistered: (phone: string, password: string) => void
 }
 
-export function RegisterScreen({ apiBaseUrl, notice, notify, onRegistered }: Props) {
+const GENDER_OPTIONS = [
+  { value: '', label: '不选' },
+  { value: '男', label: '男' },
+  { value: '女', label: '女' },
+]
+
+export function RegisterScreen({
+  apiBaseUrl,
+  notice,
+  notify,
+  dismissNotice,
+  onRegistered,
+}: Props) {
   const navigation = useNavigation<Nav>()
   const [form, setForm] = useState({
     phone: '',
@@ -32,6 +46,11 @@ export function RegisterScreen({ apiBaseUrl, notice, notify, onRegistered }: Pro
     username: '',
     realName: '',
     studentId: '',
+    email: '',
+    gender: '',
+    college: '',
+    major: '',
+    className: '',
     verificationCode: '',
   })
 
@@ -63,6 +82,7 @@ export function RegisterScreen({ apiBaseUrl, notice, notify, onRegistered }: Pro
       title="学生注册"
       helper="学生完成手机号验证后即可使用移动端课程互动功能。"
       notice={notice}
+      onDismissNotice={dismissNotice}
     >
       <LabeledField
         label="手机号"
@@ -83,6 +103,34 @@ export function RegisterScreen({ apiBaseUrl, notice, notify, onRegistered }: Pro
         label="真实姓名"
         value={form.realName}
         onChangeText={(value) => setForm((current) => ({ ...current, realName: value }))}
+      />
+      <LabeledField
+        label="邮箱（选填）"
+        value={form.email}
+        onChangeText={(value) => setForm((current) => ({ ...current, email: value }))}
+      />
+      <View>
+        <Text style={styles.fieldLabel}>性别（选填）</Text>
+        <SegmentedTabs
+          items={GENDER_OPTIONS}
+          value={form.gender}
+          onChange={(value) => setForm((current) => ({ ...current, gender: value }))}
+        />
+      </View>
+      <LabeledField
+        label="学院（选填）"
+        value={form.college}
+        onChangeText={(value) => setForm((current) => ({ ...current, college: value }))}
+      />
+      <LabeledField
+        label="专业（选填）"
+        value={form.major}
+        onChangeText={(value) => setForm((current) => ({ ...current, major: value }))}
+      />
+      <LabeledField
+        label="班级（选填）"
+        value={form.className}
+        onChangeText={(value) => setForm((current) => ({ ...current, className: value }))}
       />
       <LabeledField
         label="密码"
@@ -150,6 +198,7 @@ const styles = StyleSheet.create({
   },
   secondaryText: { color: '#004080', fontWeight: '800' },
   helper: { color: '#6b7280', lineHeight: 20 },
+  fieldLabel: { color: '#111827', fontSize: 13, fontWeight: '700', marginBottom: 6 },
   authEntryRow: {
     paddingTop: 10,
     borderTopWidth: 1,

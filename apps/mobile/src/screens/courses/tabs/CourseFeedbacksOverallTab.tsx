@@ -10,7 +10,7 @@ import {
 } from 'react-native'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
-import { api } from '../../../api'
+import { api, extractErrorMessage } from '../../../api'
 import { SegmentedTabs } from '../../../components/ui/SegmentedTabs'
 import { useMobileAuth } from '../../../contexts/MobileAuthContext'
 import type { CourseFeedbackDimension, CourseFeedbackItem, CourseItem } from '../../../domain'
@@ -66,7 +66,7 @@ export function CourseFeedbacksOverallTab({ course }: { course: CourseItem }) {
       notify('已提交课程整体反馈。', 'success')
       invalidate()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '提交反馈失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const updateMutation = useMutation({
@@ -80,7 +80,7 @@ export function CourseFeedbacksOverallTab({ course }: { course: CourseItem }) {
       notify('已更新课程反馈。', 'success')
       invalidate()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '修改反馈失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const deleteMutation = useMutation({
@@ -89,7 +89,7 @@ export function CourseFeedbacksOverallTab({ course }: { course: CourseItem }) {
       notify('已删除课程反馈。', 'success')
       invalidate()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '删除反馈失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const allFeedbacks = feedbacksQuery.data ?? []

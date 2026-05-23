@@ -43,6 +43,16 @@ export class ApiError extends Error {
   }
 }
 
+// Lets App.tsx hook into 401/SESSION_INVALID responses so a password change
+// or account cancellation from another device automatically logs the user
+// out here.
+let sessionInvalidHandler: ((reason: string) => void) | null = null
+export function setSessionInvalidHandler(
+  handler: ((reason: string) => void) | null,
+) {
+  sessionInvalidHandler = handler
+}
+
 async function requestJson<T>(baseUrl: string, path: string, options: RequestOptions = {}): Promise<T> {
   const hasBody = options.body !== undefined
   const response = await fetch(`${baseUrl}${path}`, {
@@ -65,10 +75,18 @@ async function requestJson<T>(baseUrl: string, path: string, options: RequestOpt
         ) as ValidationIssue[])
       : undefined
 
-    throw new ApiError(payload.message ?? 'request_failed', response.status, {
-      code: typeof payload?.error?.code === 'string' ? payload.error.code : undefined,
-      details,
-    })
+    const message = payload.message ?? 'request_failed'
+    const code = typeof payload?.error?.code === 'string' ? payload.error.code : undefined
+
+    // 401 against an authenticated request means the server no longer
+    // accepts our token. Notify the host app so it can clear local state.
+    // We skip notifying on login/register/verification-code calls where a
+    // 401 is just "bad credentials", not "session was revoked".
+    if (response.status === 401 && options.token && sessionInvalidHandler) {
+      sessionInvalidHandler(message)
+    }
+
+    throw new ApiError(message, response.status, { code, details })
   }
 
   return payload.data as T
@@ -288,7 +306,7 @@ export const api = {
       capacity: number
       startDate: string
       endDate: string
-      status: string
+      suspended: boolean
     }>,
   ) {
     return requestJson<{ course: Record<string, unknown> }>(baseUrl, `/courses/${courseId}`, {
@@ -308,6 +326,13 @@ export const api = {
       method: 'POST',
       token,
     })
+  },
+  listCourseEnrollments(baseUrl: string, token: string, courseId: string) {
+    return requestJson<{ items: Array<Record<string, unknown>> }>(
+      baseUrl,
+      `/courses/${courseId}/enrollments`,
+      { token },
+    )
   },
   listAssignments(baseUrl: string, token: string, courseId: string) {
     return requestJson<{ items: Array<Record<string, unknown>> }>(

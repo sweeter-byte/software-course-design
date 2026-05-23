@@ -1,3 +1,5 @@
+import { PasswordInput } from '../../components/ui/PasswordInput'
+
 export type ResetPasswordFormState = {
   phone: string
   verificationCode: string
@@ -71,11 +73,10 @@ export function ResetPasswordForm({
           </label>
           <label htmlFor="reset-new-password">
             新密码
-            <input
+            <PasswordInput
               id="reset-new-password"
               name="newPassword"
               autoComplete="new-password"
-              type="password"
               required
               minLength={6}
               title="新密码至少 6 位"
@@ -87,11 +88,10 @@ export function ResetPasswordForm({
           </label>
           <label htmlFor="reset-confirm-password">
             确认新密码
-            <input
+            <PasswordInput
               id="reset-confirm-password"
               name="confirmPassword"
               autoComplete="new-password"
-              type="password"
               required
               minLength={6}
               title="请再次输入新密码"

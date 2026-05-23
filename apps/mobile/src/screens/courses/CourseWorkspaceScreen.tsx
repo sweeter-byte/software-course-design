@@ -16,6 +16,7 @@ import {
   getInitialCourseWorkspaceTab,
   type CourseWorkspaceTabValue,
 } from './course-workspace-model'
+import { CourseEnrollmentsTab } from './tabs/CourseEnrollmentsTab'
 import { CourseFeedbacksOverallTab } from './tabs/CourseFeedbacksOverallTab'
 import { OfficerCourseAssignmentsTab } from './tabs/OfficerCourseAssignmentsTab'
 import { OfficerCourseBasicInfoTab } from './tabs/OfficerCourseBasicInfoTab'
@@ -34,7 +35,7 @@ type Route = RouteProp<CourseStackParamList, 'CourseWorkspace'>
 export function CourseWorkspaceScreen() {
   const navigation = useNavigation<Nav>()
   const route = useRoute<Route>()
-  const { session, apiBaseUrl, notice } = useMobileAuth()
+  const { session, apiBaseUrl, notice, dismissNotice } = useMobileAuth()
   const role = session.user.role
   const courseId = route.params.courseId
 
@@ -65,7 +66,7 @@ export function CourseWorkspaceScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <NoticeBanner notice={notice} />
+        <NoticeBanner notice={notice} onDismiss={dismissNotice} />
         <CourseContextHeader
           course={course}
           badge={role === 'student' && course?.enrolled ? '已加入' : null}
@@ -128,6 +129,9 @@ function ActiveTab({
   if (tab === 'basic-info' && role === 'officer') {
     return <OfficerCourseBasicInfoTab course={course} />
   }
+  if (tab === 'enrollments' && (role === 'teacher' || role === 'officer')) {
+    return <CourseEnrollmentsTab course={course} />
+  }
   return (
     <View style={styles.placeholder}>
       <Text style={styles.placeholderTitle}>{tabLabelFor(tab)}</Text>
@@ -146,6 +150,8 @@ function tabLabelFor(tab: CourseWorkspaceTabValue): string {
       return '作业反馈'
     case 'basic-info':
       return '基础信息维护'
+    case 'enrollments':
+      return '学生名单'
     default:
       return tab
   }

@@ -8,6 +8,7 @@ export type MobileAuthValue = {
   apiBaseUrl: string
   notice: NoticeState | null
   notify: (message: string, type?: NoticeType) => void
+  dismissNotice: () => void
   clearSession: (message: string, type?: NoticeType) => void
   updateSessionUser: (user: SessionPayload['user']) => void
 }
@@ -19,13 +20,22 @@ export function MobileAuthProvider({
   apiBaseUrl,
   notice,
   notify,
+  dismissNotice,
   clearSession,
   updateSessionUser,
   children,
 }: MobileAuthValue & { children: ReactNode }) {
   const value = useMemo<MobileAuthValue>(
-    () => ({ session, apiBaseUrl, notice, notify, clearSession, updateSessionUser }),
-    [session, apiBaseUrl, notice, notify, clearSession, updateSessionUser],
+    () => ({
+      session,
+      apiBaseUrl,
+      notice,
+      notify,
+      dismissNotice,
+      clearSession,
+      updateSessionUser,
+    }),
+    [session, apiBaseUrl, notice, notify, dismissNotice, clearSession, updateSessionUser],
   )
   return <MobileAuthContext.Provider value={value}>{children}</MobileAuthContext.Provider>
 }

@@ -1,3 +1,5 @@
+import { PasswordInput } from '../../components/ui/PasswordInput'
+
 export type LoginFormState = {
   phone: string
   password: string
@@ -48,11 +50,10 @@ export function LoginForm({
         </label>
         <label htmlFor="login-password">
           密码
-          <input
+          <PasswordInput
             id="login-password"
             name="password"
             autoComplete="current-password"
-            type="password"
             required
             minLength={6}
             title="密码至少 6 位"

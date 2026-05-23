@@ -14,8 +14,7 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { api } from '../../../api'
-import { SegmentedTabs } from '../../../components/ui/SegmentedTabs'
+import { api, extractErrorMessage } from '../../../api'
 import { useMobileAuth } from '../../../contexts/MobileAuthContext'
 import type {
   AdminUserItem,
@@ -30,12 +29,12 @@ import type { CourseStackParamList } from '../../../navigation/CourseStack'
 
 type StackNav = NativeStackNavigationProp<CourseStackParamList, 'CourseWorkspace'>
 
-const STATUS_OPTIONS = [
-  { value: 'not_started', label: '未开始' },
-  { value: 'active', label: '开课中' },
-  { value: 'completed', label: '已结课' },
-  { value: 'suspended', label: '暂停' },
-]
+const STATUS_LABELS: Record<string, string> = {
+  not_started: '未开始',
+  active: '进行中',
+  completed: '已结课',
+  suspended: '已暂停',
+}
 
 type Draft = {
   courseCode: string
@@ -48,7 +47,6 @@ type Draft = {
   capacity: string
   startDate: string
   endDate: string
-  status: string
 }
 
 function toDraft(course: CourseItem): Draft {
@@ -63,7 +61,6 @@ function toDraft(course: CourseItem): Draft {
     capacity: String(course.capacity ?? ''),
     startDate: course.startDate ?? '',
     endDate: course.endDate ?? '',
-    status: course.status,
   }
 }
 
@@ -152,8 +149,33 @@ export function OfficerCourseBasicInfoTab({ course }: { course: CourseItem }) {
       queryClient.invalidateQueries({ queryKey: ['mobile-course-detail', apiBaseUrl, session.accessToken, course.id] })
       queryClient.invalidateQueries({ queryKey: ['mobile-course-list'] })
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '保存课程信息失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
+
+  const suspendMutation = useMutation({
+    mutationFn: (suspended: boolean) =>
+      api.updateCourse(apiBaseUrl, session.accessToken, course.id, { suspended }),
+    onSuccess: () => {
+      notify('课程状态已更新。', 'success')
+      queryClient.invalidateQueries({ queryKey: ['mobile-course-detail', apiBaseUrl, session.accessToken, course.id] })
+      queryClient.invalidateQueries({ queryKey: ['mobile-course-list'] })
+    },
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
+  })
+
+  function confirmToggleSuspend() {
+    const next = !course.suspended
+    Alert.alert(
+      next ? '暂停课程' : '恢复课程',
+      next
+        ? '确认暂停该课程吗？学生与教师会立即看到"已暂停"。'
+        : '确认恢复该课程吗？恢复后状态会按开课/结课日期自动计算。',
+      [
+        { text: '取消', style: 'cancel' },
+        { text: '确认', onPress: () => suspendMutation.mutate(next) },
+      ],
+    )
+  }
 
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteCourse(apiBaseUrl, session.accessToken, course.id),
@@ -162,7 +184,7 @@ export function OfficerCourseBasicInfoTab({ course }: { course: CourseItem }) {
       queryClient.invalidateQueries({ queryKey: ['mobile-course-list'] })
       navigation.popToTop()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '删除课程失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const impactReady =
@@ -297,13 +319,10 @@ export function OfficerCourseBasicInfoTab({ course }: { course: CourseItem }) {
         />
 
         <View style={styles.field}>
-          <Text style={styles.fieldLabel}>课程状态</Text>
-          <SegmentedTabs
-            items={STATUS_OPTIONS}
-            value={draft.status}
-            onChange={(value) => setDraft((current) => ({ ...current, status: value }))}
-            variant="wrap"
-          />
+          <Text style={styles.fieldLabel}>课程状态（按开课/结课日期与暂停开关自动计算）</Text>
+          <Text style={styles.inputValue}>
+            {STATUS_LABELS[course.status] ?? course.status}
+          </Text>
         </View>
 
         <Pressable style={styles.primaryButton} onPress={confirmUpdate} disabled={updateMutation.isPending}>
@@ -311,6 +330,20 @@ export function OfficerCourseBasicInfoTab({ course }: { course: CourseItem }) {
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.primaryButtonText}>保存修改</Text>
+          )}
+        </Pressable>
+
+        <Pressable
+          style={course.suspended ? styles.primaryButton : styles.dangerButton}
+          onPress={confirmToggleSuspend}
+          disabled={suspendMutation.isPending}
+        >
+          {suspendMutation.isPending ? (
+            <ActivityIndicator color={course.suspended ? '#fff' : '#b91c1c'} />
+          ) : (
+            <Text style={course.suspended ? styles.primaryButtonText : styles.dangerButtonText}>
+              {course.suspended ? '恢复课程' : '暂停课程'}
+            </Text>
           )}
         </Pressable>
       </View>

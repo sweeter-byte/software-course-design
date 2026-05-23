@@ -14,7 +14,7 @@ type RoleScreenProps = {
 }
 
 export function RoleScreen({ title, subtitle, children }: RoleScreenProps) {
-  const { session, apiBaseUrl, notice, notify, clearSession } = useMobileAuth()
+  const { session, apiBaseUrl, notice, notify, dismissNotice, clearSession } = useMobileAuth()
   const queryClient = useQueryClient()
 
   const logoutMutation = useMutation({
@@ -36,7 +36,7 @@ export function RoleScreen({ title, subtitle, children }: RoleScreenProps) {
         onLogout={() => logoutMutation.mutate()}
       />
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <NoticeBanner notice={notice} />
+        <NoticeBanner notice={notice} onDismiss={dismissNotice} />
         {children}
       </ScrollView>
     </>

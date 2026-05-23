@@ -59,11 +59,21 @@ function isSessionPayload(value: unknown): value is SessionPayload {
   return true
 }
 
-export function readInitialRuntimeState(storage: StorageLike, defaultApiBaseUrl: string) {
+export function readInitialRuntimeState(
+  storage: StorageLike,
+  defaultApiBaseUrl: string,
+  // Session lives in a separate per-tab store (sessionStorage) so multiple
+  // tabs can be logged in as different roles in the same browser. When a
+  // dedicated session storage is not provided the loader falls back to the
+  // primary storage, which keeps the unit tests and any single-storage
+  // callers backwards compatible.
+  sessionStorage?: StorageLike,
+) {
   const storedApiBaseUrl = readStoredJson(storage, 'cms_api_base')
   const apiBaseUrl = typeof storedApiBaseUrl === 'string' ? storedApiBaseUrl : defaultApiBaseUrl
 
-  const storedSession = readStoredJson(storage, 'cms_session')
+  const sessionStore = sessionStorage ?? storage
+  const storedSession = readStoredJson(sessionStore, 'cms_session')
 
   if (storedSession === null) {
     return {
@@ -81,7 +91,7 @@ export function readInitialRuntimeState(storage: StorageLike, defaultApiBaseUrl:
     }
   }
 
-  storage.removeItem('cms_session')
+  sessionStore.removeItem('cms_session')
 
   return {
     apiBaseUrl,

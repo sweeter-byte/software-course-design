@@ -16,6 +16,7 @@ describe('mobile course workspace tabs', () => {
 
     expect(getCourseWorkspaceTabs('teacher').map((tab) => tab.value)).toEqual([
       'overview',
+      'enrollments',
       'assignments',
       'submissions',
       'feedbacks',
@@ -25,6 +26,7 @@ describe('mobile course workspace tabs', () => {
     expect(getCourseWorkspaceTabs('officer').map((tab) => tab.value)).toEqual([
       'overview',
       'basic-info',
+      'enrollments',
       'assignments',
       'course-feedbacks',
     ])

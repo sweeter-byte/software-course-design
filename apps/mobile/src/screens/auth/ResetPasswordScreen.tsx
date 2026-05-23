@@ -16,10 +16,17 @@ type Props = {
   apiBaseUrl: string
   notice: NoticeState | null
   notify: (message: string, type?: NoticeType) => void
+  dismissNotice?: () => void
   onReset: (phone: string, newPassword: string) => void
 }
 
-export function ResetPasswordScreen({ apiBaseUrl, notice, notify, onReset }: Props) {
+export function ResetPasswordScreen({
+  apiBaseUrl,
+  notice,
+  notify,
+  dismissNotice,
+  onReset,
+}: Props) {
   const navigation = useNavigation<Nav>()
   const [form, setForm] = useState({
     phone: '',
@@ -58,6 +65,7 @@ export function ResetPasswordScreen({ apiBaseUrl, notice, notify, onReset }: Pro
       title="找回密码"
       helper="通过手机号验证码重置密码，完成后返回登录页。"
       notice={notice}
+      onDismissNotice={dismissNotice}
     >
       <LabeledField
         label="手机号"

@@ -12,7 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { api } from '../../api'
+import { api, extractErrorMessage } from '../../api'
 import { NoticeBanner } from '../../components/feedback/NoticeBanner'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
 import type { CourseStackParamList } from '../../navigation/CourseStack'
@@ -33,7 +33,7 @@ function formatDateTimeBrief(value: string | null | undefined) {
 export function SubmissionDetailScreen() {
   const navigation = useNavigation<Nav>()
   const route = useRoute<Route>()
-  const { session, apiBaseUrl, notice, notify } = useMobileAuth()
+  const { session, apiBaseUrl, notice, notify, dismissNotice } = useMobileAuth()
   const queryClient = useQueryClient()
   const role = session.user.role
   const { submissionId, courseId } = route.params
@@ -86,7 +86,7 @@ export function SubmissionDetailScreen() {
         getSubmissionGradeInvalidationKeys(apiBaseUrl, session.accessToken, courseId, submissionId),
       )
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '批改失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   return (
@@ -100,7 +100,7 @@ export function SubmissionDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <NoticeBanner notice={notice} />
+        <NoticeBanner notice={notice} onDismiss={dismissNotice} />
 
         {submissionQuery.isLoading ? (
           <View style={styles.card}>

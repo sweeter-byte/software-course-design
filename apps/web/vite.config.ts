@@ -18,4 +18,11 @@ export default defineConfig({
     },
     dedupe: ['react', 'react-dom'],
   },
+  build: {
+    // Ship source maps to production so the in-page RootErrorBoundary's
+    // stack trace (and browser devtools) point at real .tsx files instead
+    // of minified `index-*.js` offsets. Acceptance testers can screenshot
+    // the readable stack frames straight from the error overlay.
+    sourcemap: true,
+  },
 })

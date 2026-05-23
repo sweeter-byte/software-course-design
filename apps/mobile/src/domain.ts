@@ -7,6 +7,14 @@ export type SessionUser = {
   username: string
   realName: string
   studentNo?: string | null
+  // Optional profile fields. The server returns them via /users/me; older
+  // login payloads do not include them, so they stay optional everywhere.
+  email?: string | null
+  gender?: string | null
+  college?: string | null
+  major?: string | null
+  className?: string | null
+  teacherNo?: string | null
 }
 
 export type CourseStatus = 'not_started' | 'active' | 'completed' | 'suspended' | string
@@ -25,7 +33,9 @@ export type CourseItem = {
   capacity: number
   startDate?: string | null
   endDate?: string | null
+  // Server-derived from start_date / end_date / today + suspended flag.
   status: CourseStatus
+  suspended?: boolean
   enrolled?: boolean
 }
 
@@ -133,6 +143,19 @@ export type WorkspaceContext = {
   course: CourseItem | null
   assignment: AssignmentItem | null
   submission: SubmissionItem | null
+}
+
+export type CourseEnrollmentItem = {
+  studentId: string
+  realName: string
+  studentNo?: string | null
+  phone: string
+  email?: string | null
+  college?: string | null
+  major?: string | null
+  className?: string | null
+  enrolledAt: string
+  status: string
 }
 
 export type AdminUserItem = {

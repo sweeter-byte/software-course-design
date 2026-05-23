@@ -3,13 +3,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 
 import './App.css'
-import { api, type SessionPayload } from './api'
+import { api, setSessionInvalidHandler, type SessionPayload } from './api'
 import { RoleShell } from './components/layout/RoleShell'
 import { AuthProvider } from './contexts/AuthContext'
 import { NotificationsProvider } from './contexts/NotificationsContext'
 import { AccountRoute } from './features/account/AccountRoute'
 import { StudentAssignmentsRoute } from './features/assignments/StudentAssignmentsRoute'
 import { LoginShell, type AuthMode } from './features/auth/LoginShell'
+import { CourseEnrollmentsTab } from './features/courseWorkspace/CourseEnrollmentsTab'
 import { CourseWorkspace } from './features/courseWorkspace/CourseWorkspace'
 import { OfficerCourseAssignmentsTab } from './features/courseWorkspace/OfficerCourseAssignmentsTab'
 import { OfficerCourseBasicInfoTab } from './features/courseWorkspace/OfficerCourseBasicInfoTab'
@@ -139,6 +140,7 @@ const STUDENT_COURSE_WORKSPACE_TABS = [
 
 const TEACHER_COURSE_WORKSPACE_TABS = [
   { to: 'overview', label: '课程概览' },
+  { to: 'enrollments', label: '学生名单' },
   { to: 'assignments', label: '作业' },
   { to: 'submissions', label: '提交批改' },
   { to: 'feedbacks', label: '作业反馈' },
@@ -148,6 +150,7 @@ const TEACHER_COURSE_WORKSPACE_TABS = [
 const OFFICER_COURSE_WORKSPACE_TABS = [
   { to: 'overview', label: '课程概览' },
   { to: 'basic-info', label: '基础信息维护' },
+  { to: 'enrollments', label: '学生名单' },
   { to: 'assignments', label: '作业概况' },
   { to: 'course-feedbacks', label: '课程反馈查看' },
 ] as const
@@ -170,9 +173,21 @@ function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const [initialRuntimeState] = useState(() =>
-    readInitialRuntimeState(window.localStorage, DEFAULT_API_BASE_URL),
-  )
+  const [initialRuntimeState] = useState(() => {
+    // Session lives in sessionStorage so each browser tab keeps its own
+    // identity. Previously cms_session was in localStorage, which caused
+    // three tabs (student/teacher/officer) to collapse onto whichever
+    // account logged in last. Drop the legacy entry so old browsers do not
+    // re-hydrate a stale shared session after this deploy.
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem('cms_session')
+    }
+    return readInitialRuntimeState(
+      window.localStorage,
+      DEFAULT_API_BASE_URL,
+      window.sessionStorage,
+    )
+  })
   const apiBaseUrl = initialRuntimeState.apiBaseUrl
   const [session, setSession] = useState<SessionPayload | null>(initialRuntimeState.session)
   const authMode: AuthMode = pathToAuthMode(location.pathname)
@@ -191,7 +206,11 @@ function App() {
   }, [initialRuntimeState.recoveredInvalidSession, notify, dismissNotification])
 
   useEffect(() => {
-    window.localStorage.setItem('cms_session', JSON.stringify(session))
+    if (session) {
+      window.sessionStorage.setItem('cms_session', JSON.stringify(session))
+    } else {
+      window.sessionStorage.removeItem('cms_session')
+    }
   }, [session])
 
   useEffect(() => {
@@ -302,6 +321,19 @@ function App() {
     queryClient.clear()
     setSession(null)
   }
+
+  // Pick up server-side session revocation (401) — e.g. the other client
+  // just changed the password — and boot the user back to the login form.
+  useEffect(() => {
+    setSessionInvalidHandler(() => {
+      if (!session) return
+      queryClient.clear()
+      setSession(null)
+      notify({ type: 'info', content: '登录已失效，请重新登录。' })
+      navigate('/login', { replace: true })
+    })
+    return () => setSessionInvalidHandler(null)
+  }, [session, queryClient, navigate, notify])
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -418,6 +450,7 @@ function App() {
             element={<CourseWorkspace role="teacher" tabs={TEACHER_COURSE_WORKSPACE_TABS} />}
           >
             <Route path="overview" element={<TeacherCourseOverviewTab />} />
+            <Route path="enrollments" element={<CourseEnrollmentsTab />} />
             <Route path="assignments" element={<TeacherCourseAssignmentsTab />}>
               <Route path=":assignmentId" element={<TeacherAssignmentDetailRoute />} />
             </Route>
@@ -440,6 +473,7 @@ function App() {
           >
             <Route path="overview" element={<OfficerCourseOverviewTab />} />
             <Route path="basic-info" element={<OfficerCourseBasicInfoTab />} />
+            <Route path="enrollments" element={<CourseEnrollmentsTab />} />
             <Route path="assignments" element={<OfficerCourseAssignmentsTab />} />
             <Route path="course-feedbacks" element={<TeacherCourseFeedbacksReadonlyTab />} />
           </Route>

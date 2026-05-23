@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { api } from '../../api'
+import { api, extractErrorMessage } from '../../api'
 import { NoticeBanner } from '../../components/feedback/NoticeBanner'
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
@@ -67,7 +67,7 @@ function DetailShell({
 export function AssignmentDetailScreen() {
   const navigation = useNavigation<Nav>()
   const route = useRoute<Route>()
-  const { session, notice } = useMobileAuth()
+  const { session, notice, dismissNotice } = useMobileAuth()
   const role = session.user.role
   const { assignmentId, courseId } = route.params
   const [nowMs] = useState(() => Date.now())
@@ -103,7 +103,7 @@ export function AssignmentDetailScreen() {
 
   return (
     <DetailShell title="作业详情" onBack={() => navigation.goBack()}>
-      <NoticeBanner notice={notice} />
+      <NoticeBanner notice={notice} onDismiss={dismissNotice} />
 
       <View style={styles.card}>
         <Text style={styles.assignmentTag}>{assignmentStatusLabel(assignment, nowMs)}</Text>
@@ -174,7 +174,7 @@ function StudentAssignmentBody({
       notify('提交成功。', 'success')
       invalidateAssignmentList()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '提交失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const updateMutation = useMutation({
@@ -186,7 +186,7 @@ function StudentAssignmentBody({
       notify('已更新提交。', 'success')
       invalidateAssignmentList()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '修改提交失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const lock = evaluateStudentSubmissionLock(
@@ -325,7 +325,7 @@ function StudentFeedbackSection({
       setDraft({ kind: 'question', content: '' })
       invalidateThreads()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '发起反馈失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   if (!gradedAndUnlocked) {
@@ -466,7 +466,7 @@ function TeacherAssignmentBody({
       notify('作业已更新。', 'success')
       invalidate()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '修改作业失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const cancelMutation = useMutation({
@@ -476,7 +476,7 @@ function TeacherAssignmentBody({
       notify('作业已取消。', 'success')
       invalidate()
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '取消作业失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const isCancelled = assignment.status === 'cancelled'

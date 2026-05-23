@@ -31,7 +31,27 @@ type CourseRow = {
   enrolled?: number | null
 }
 
+/**
+ * Course status is derived from the schedule plus a suspended flag instead
+ * of being a free-form column an officer can flip manually. The stored
+ * status column is used purely to remember the suspended state (status =
+ * 'suspended' means the course is paused); every other value is recomputed
+ * from start_date / end_date / today on each read.
+ */
+function deriveCourseStatus(
+  row: Pick<CourseRow, 'status' | 'start_date' | 'end_date'>,
+  nowMs: number = Date.now(),
+): 'not_started' | 'active' | 'completed' | 'suspended' {
+  if (row.status === 'suspended') return 'suspended'
+  const startMs = Date.parse(row.start_date)
+  const endMs = Date.parse(row.end_date)
+  if (Number.isFinite(endMs) && nowMs > endMs) return 'completed'
+  if (Number.isFinite(startMs) && nowMs < startMs) return 'not_started'
+  return 'active'
+}
+
 function toCourse(row: CourseRow, options?: { includeEnrolled?: boolean }) {
+  const derivedStatus = deriveCourseStatus(row)
   const base = {
     id: row.id,
     courseCode: row.course_code,
@@ -46,7 +66,8 @@ function toCourse(row: CourseRow, options?: { includeEnrolled?: boolean }) {
     capacity: row.capacity,
     startDate: row.start_date,
     endDate: row.end_date,
-    status: row.status,
+    status: derivedStatus,
+    suspended: row.status === 'suspended',
   }
 
   if (options?.includeEnrolled) {
@@ -120,6 +141,81 @@ async function getCourseById(database: Database, courseId: string, studentId?: s
 }
 
 export function registerCourseRoutes(app: FastifyInstance, context: CourseRouteContext) {
+  app.get('/:courseId/enrollments', async (request) => {
+    const actor = await requireRole(request, ['officer', 'teacher'])
+    const params = request.params as { courseId: string }
+
+    const course = (await context.database
+      .prepare('SELECT id, teacher_id FROM courses WHERE id = ? LIMIT 1')
+      .get(params.courseId)) as { id: string; teacher_id: string } | undefined
+
+    if (!course) {
+      throw new AppError('course_not_found', 404, 'COURSE_NOT_FOUND')
+    }
+
+    // Teachers may only see the roster of their own courses; officers can
+    // see any course.
+    if (actor.role === 'teacher' && course.teacher_id !== actor.sub) {
+      throw new AppError('forbidden', 403, 'FORBIDDEN')
+    }
+
+    const rows = (await context.database
+      .prepare(
+        `
+          SELECT
+            users.id AS student_id,
+            users.real_name AS real_name,
+            users.student_no AS student_no,
+            users.phone AS phone,
+            users.email AS email,
+            users.college AS college,
+            users.major AS major,
+            users.class_name AS class_name,
+            course_enrollments.created_at AS enrolled_at,
+            course_enrollments.status AS enrollment_status
+          FROM course_enrollments
+          INNER JOIN users ON users.id = course_enrollments.student_id
+          WHERE course_enrollments.course_id = ?
+            AND course_enrollments.status = 'enrolled'
+          ORDER BY course_enrollments.created_at ASC
+        `,
+      )
+      .all(params.courseId)) as Array<{
+      student_id: string
+      real_name: string
+      student_no: string | null
+      phone: string
+      email: string | null
+      college: string | null
+      major: string | null
+      class_name: string | null
+      enrolled_at: string
+      enrollment_status: string
+    }>
+
+    return {
+      success: true,
+      message: 'ok',
+      data: {
+        items: rows.map((row) => ({
+          studentId: row.student_id,
+          realName: row.real_name,
+          studentNo: row.student_no,
+          phone: row.phone,
+          email: row.email,
+          college: row.college,
+          major: row.major,
+          className: row.class_name,
+          enrolledAt: row.enrolled_at,
+          status: row.enrollment_status,
+        })),
+      },
+      meta: {
+        requestId: request.id,
+      },
+    }
+  })
+
   app.post('/:courseId/enroll', async (request, reply) => {
     const actor = await requireRole(request, ['student'])
     const params = request.params as { courseId: string }
@@ -453,6 +549,14 @@ export function registerCourseRoutes(app: FastifyInstance, context: CourseRouteC
       }
     }
 
+    // suspended is the only manual lever; everything else is recomputed from
+    // dates on read. Default the stored status to 'not_started' for active
+    // courses so it stays inside the CHECK constraint while leaving the real
+    // status to deriveCourseStatus().
+    const isSuspended =
+      payload.suspended === undefined
+        ? currentCourse.status === 'suspended'
+        : payload.suspended
     const nextCourse = {
       courseCode: payload.courseCode ?? currentCourse.course_code,
       courseName: payload.courseName ?? currentCourse.course_name,
@@ -464,7 +568,7 @@ export function registerCourseRoutes(app: FastifyInstance, context: CourseRouteC
       capacity: payload.capacity ?? currentCourse.capacity,
       startDate: payload.startDate ?? currentCourse.start_date,
       endDate: payload.endDate ?? currentCourse.end_date,
-      status: payload.status ?? currentCourse.status,
+      status: isSuspended ? 'suspended' : 'not_started',
     }
     const now = new Date().toISOString()
 

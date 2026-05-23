@@ -5,6 +5,12 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AssignmentItem } from '../../domain'
 import { StudentAssignmentWorkspace } from './StudentAssignmentWorkspace'
 
+// Anchor dates relative to today so the test fixture does not silently rot
+// when the wall clock crosses the hard-coded due date (which is what flipped
+// these two tests to "已截止不可修改" / "已截止不可提交").
+const FUTURE_START_ISO = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+const FUTURE_DUE_ISO = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+
 const baseAssignment: AssignmentItem = {
   id: 'assignment-1',
   courseId: 'course-1',
@@ -12,8 +18,8 @@ const baseAssignment: AssignmentItem = {
   title: '课程作业一',
   description: '完成课程练习。',
   requirement: '提交完整答案。',
-  startAt: '2026-05-01T00:00:00.000Z',
-  dueAt: '2026-05-20T16:00:00.000Z',
+  startAt: FUTURE_START_ISO,
+  dueAt: FUTURE_DUE_ISO,
   status: 'published',
 }
 

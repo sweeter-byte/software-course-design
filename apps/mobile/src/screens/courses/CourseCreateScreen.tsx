@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { api } from '../../api'
+import { api, extractErrorMessage } from '../../api'
 import { NoticeBanner } from '../../components/feedback/NoticeBanner'
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
@@ -44,7 +44,7 @@ const DEFAULT_DRAFT = {
 
 export function CourseCreateScreen() {
   const navigation = useNavigation<Nav>()
-  const { session, apiBaseUrl, notice, notify } = useMobileAuth()
+  const { session, apiBaseUrl, notice, notify, dismissNotice } = useMobileAuth()
   const queryClient = useQueryClient()
 
   const [draft, setDraft] = useState(DEFAULT_DRAFT)
@@ -87,7 +87,7 @@ export function CourseCreateScreen() {
         navigation.goBack()
       }
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '创建课程失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const formInvalid =
@@ -111,7 +111,7 @@ export function CourseCreateScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        <NoticeBanner notice={notice} />
+        <NoticeBanner notice={notice} onDismiss={dismissNotice} />
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>课程基础信息</Text>
           <Text style={styles.helper}>必填项均需填写后方可保存。</Text>

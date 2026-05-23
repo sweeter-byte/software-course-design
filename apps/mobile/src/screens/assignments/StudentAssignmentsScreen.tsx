@@ -17,6 +17,7 @@ import { NoticeBanner } from '../../components/feedback/NoticeBanner'
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
 import type { AssignmentItem, CourseItem } from '../../domain'
+import { resetCourseStackTo } from '../../navigation/courseStackNav'
 import type { RoleTabParamList } from '../../navigation/RoleTabs'
 import {
   SUBMISSION_STATUS_OPTIONS,
@@ -38,7 +39,7 @@ function formatDateTimeBrief(value: string | null | undefined) {
 }
 
 export function StudentAssignmentsScreen() {
-  const { session, apiBaseUrl, notice } = useMobileAuth()
+  const { session, apiBaseUrl, notice, dismissNotice } = useMobileAuth()
   const navigation = useNavigation<Nav>()
   const [filter, setFilter] = useState<string>('')
   const [nowMs] = useState(() => Date.now())
@@ -94,15 +95,19 @@ export function StudentAssignmentsScreen() {
   }
 
   function openAssignment(row: AssignmentRow) {
-    navigation.navigate('Courses', {
-      screen: 'AssignmentDetail',
-      params: { assignmentId: row.assignment.id, courseId: row.course.id },
-    })
+    resetCourseStackTo(navigation, [
+      { name: 'CourseList' },
+      { name: 'CourseWorkspace', params: { courseId: row.course.id } },
+      {
+        name: 'AssignmentDetail',
+        params: { assignmentId: row.assignment.id, courseId: row.course.id },
+      },
+    ])
   }
 
   return (
     <View style={styles.container}>
-      <NoticeBanner notice={notice} />
+      <NoticeBanner notice={notice} onDismiss={dismissNotice} />
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>我的作业</Text>
         <Text style={styles.helper}>跨课程汇总所有作业，点击进入作业详情查看或提交。</Text>

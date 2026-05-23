@@ -1,3 +1,5 @@
+import { PasswordInput } from '../../components/ui/PasswordInput'
+
 export type StudentRegisterFormState = {
   phone: string
   password: string
@@ -155,11 +157,10 @@ export function StudentRegisterForm({
           </label>
           <label htmlFor="register-password">
             密码
-            <input
+            <PasswordInput
               id="register-password"
               name="password"
               autoComplete="new-password"
-              type="password"
               required
               minLength={6}
               title="密码至少 6 位"
@@ -169,11 +170,10 @@ export function StudentRegisterForm({
           </label>
           <label htmlFor="register-confirm-password">
             确认密码
-            <input
+            <PasswordInput
               id="register-confirm-password"
               name="confirmPassword"
               autoComplete="new-password"
-              type="password"
               required
               minLength={6}
               title="请再次输入密码"

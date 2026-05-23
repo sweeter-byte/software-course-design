@@ -117,7 +117,10 @@ export const courseCreateSchema = z.object({
 export const courseUpdateSchema = courseCreateSchema
   .partial()
   .extend({
-    status: z.enum(['not_started', 'active', 'completed', 'suspended']).optional(),
+    // Course status is now derived from start_date / end_date / today on the
+    // server. The only piece an officer can flip manually is "suspended",
+    // which forces the status into 'suspended' regardless of the schedule.
+    suspended: z.boolean().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: '请至少提供一项课程信息',

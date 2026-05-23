@@ -1,3 +1,5 @@
+import { PasswordInput } from '../../components/ui/PasswordInput'
+
 export type PasswordFormState = {
   oldPassword: string
   newPassword: string
@@ -35,11 +37,10 @@ export function PasswordForm({
       <div className="form-grid">
         <label htmlFor="account-old-password">
           旧密码
-          <input
+          <PasswordInput
             id="account-old-password"
             name="oldPassword"
             autoComplete="current-password"
-            type="password"
             required
             minLength={6}
             title="请输入旧密码"
@@ -49,11 +50,10 @@ export function PasswordForm({
         </label>
         <label htmlFor="account-new-password">
           新密码
-          <input
+          <PasswordInput
             id="account-new-password"
             name="newPassword"
             autoComplete="new-password"
-            type="password"
             required
             minLength={6}
             title="新密码至少 6 位"
@@ -63,11 +63,10 @@ export function PasswordForm({
         </label>
         <label htmlFor="account-confirm-password">
           确认新密码
-          <input
+          <PasswordInput
             id="account-confirm-password"
             name="confirmPassword"
             autoComplete="new-password"
-            type="password"
             required
             minLength={6}
             title="请再次输入新密码"

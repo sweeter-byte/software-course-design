@@ -17,12 +17,20 @@ type Props = {
   apiBaseUrl: string
   notice: NoticeState | null
   notify: (message: string, type?: NoticeType) => void
+  dismissNotice?: () => void
   onAuthenticated: (payload: SessionPayload) => void
   /** When the parent has captured phone/password from register or reset flows. */
   prefill?: { phone: string; password: string } | null
 }
 
-export function LoginScreen({ apiBaseUrl, notice, notify, onAuthenticated, prefill }: Props) {
+export function LoginScreen({
+  apiBaseUrl,
+  notice,
+  notify,
+  dismissNotice,
+  onAuthenticated,
+  prefill,
+}: Props) {
   const navigation = useNavigation<Nav>()
   const [form, setForm] = useState({
     phone: prefill?.phone ?? '',
@@ -48,6 +56,7 @@ export function LoginScreen({ apiBaseUrl, notice, notify, onAuthenticated, prefi
       title="账号登录"
       helper="使用 Web 端同一账号体系，登录后按角色进入对应移动工作台。"
       notice={notice}
+      onDismissNotice={dismissNotice}
     >
       <LabeledField
         label="手机号"

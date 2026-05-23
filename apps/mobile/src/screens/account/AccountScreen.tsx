@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 
 import { api, extractErrorMessage } from '../../api'
 import { DevSettingsSection } from '../../components/account/DevSettingsSection'
@@ -9,6 +9,15 @@ import { RoleScreen } from '../../components/layout/RoleScreen'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
 import { persistSession, secureSessionStorage } from '../../session'
 
+function textValue(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+function nullableText(value: string): string | null {
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
 type Props = {
   onChangeApiBaseUrl: (next: string) => void
 }
@@ -16,15 +25,26 @@ type Props = {
 export function AccountScreen({ onChangeApiBaseUrl }: Props) {
   const { session, apiBaseUrl, notify, clearSession, updateSessionUser } = useMobileAuth()
 
+  // Pull the full profile from /users/me. Without this we only ever see the
+  // bare SessionUser fields (id/role/phone/username/realName), and saving
+  // would wipe email/college/major/className server-side because we'd send
+  // them as null.
+  const currentUserQuery = useQuery({
+    queryKey: ['mobile-current-user', apiBaseUrl, session.accessToken],
+    queryFn: async () => api.getCurrentUser(apiBaseUrl, session.accessToken),
+  })
+
   const [profileDraft, setProfileDraft] = useState({
     username: session.user.username,
     realName: session.user.realName,
-    email: '',
-    gender: '',
-    college: '',
-    major: '',
-    className: '',
+    email: textValue(session.user.email),
+    gender: textValue(session.user.gender),
+    college: textValue(session.user.college),
+    major: textValue(session.user.major),
+    className: textValue(session.user.className),
   })
+  const [profileDirty, setProfileDirty] = useState(false)
+  const [profileSyncKey, setProfileSyncKey] = useState<string | null>(null)
   const [passwordDraft, setPasswordDraft] = useState({
     oldPassword: '',
     newPassword: '',
@@ -37,38 +57,68 @@ export function AccountScreen({ onChangeApiBaseUrl }: Props) {
     newVerificationCode: '',
   })
 
+  // Hydrate the draft from /users/me. We only stomp the local copy when the
+  // server payload changes (updatedAt) AND the user has not started editing
+  // — otherwise typing would get reset on every refetch.
+  const currentUser = currentUserQuery.data?.user as Record<string, unknown> | undefined
+  const nextSyncKey = currentUser
+    ? String(currentUser.updatedAt ?? currentUser.id ?? '')
+    : null
+  if (nextSyncKey !== profileSyncKey) {
+    setProfileSyncKey(nextSyncKey)
+    if (currentUser && !profileDirty) {
+      setProfileDraft({
+        username: textValue(currentUser.username) || session.user.username,
+        realName: textValue(currentUser.realName) || session.user.realName,
+        email: textValue(currentUser.email),
+        gender: textValue(currentUser.gender),
+        college: textValue(currentUser.college),
+        major: textValue(currentUser.major),
+        className: textValue(currentUser.className),
+      })
+    }
+  }
+
   useEffect(() => {
-    setProfileDraft((current) => ({
-      ...current,
-      username: session.user.username,
-      realName: session.user.realName,
-    }))
     setPhoneDraft((current) => ({ ...current, oldPhone: session.user.phone }))
-  }, [session.user.username, session.user.realName, session.user.phone])
+  }, [session.user.phone])
 
   const updateProfileMutation = useMutation({
     mutationFn: () =>
       api.updateProfile(apiBaseUrl, session.accessToken, {
         username: profileDraft.username,
         realName: profileDraft.realName,
-        email: profileDraft.email || null,
-        gender: profileDraft.gender || null,
-        college: profileDraft.college || null,
-        major: profileDraft.major || null,
-        className: profileDraft.className || null,
+        email: nullableText(profileDraft.email),
+        gender: nullableText(profileDraft.gender),
+        college: nullableText(profileDraft.college),
+        major: nullableText(profileDraft.major),
+        className: nullableText(profileDraft.className),
       }),
     onSuccess: (payload) => {
+      const user = payload.user as Record<string, unknown>
       const nextUser = {
         ...session.user,
-        username: String(payload.user.username),
-        realName: String(payload.user.realName),
+        username: textValue(user.username) || session.user.username,
+        realName: textValue(user.realName) || session.user.realName,
+        email: textValue(user.email) || null,
+        gender: textValue(user.gender) || null,
+        college: textValue(user.college) || null,
+        major: textValue(user.major) || null,
+        className: textValue(user.className) || null,
       }
       updateSessionUser(nextUser)
       void persistSession(secureSessionStorage, { ...session, user: nextUser })
+      setProfileDirty(false)
+      void currentUserQuery.refetch()
       notify('资料已更新。', 'success')
     },
     onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
+
+  function patchProfile(next: Partial<typeof profileDraft>) {
+    setProfileDirty(true)
+    setProfileDraft((current) => ({ ...current, ...next }))
+  }
 
   const changePasswordMutation = useMutation({
     mutationFn: () => api.changePassword(apiBaseUrl, session.accessToken, passwordDraft),
@@ -139,32 +189,32 @@ export function AccountScreen({ onChangeApiBaseUrl }: Props) {
         <LabeledField
           label="用户名"
           value={profileDraft.username}
-          onChangeText={(value) => setProfileDraft((current) => ({ ...current, username: value }))}
+          onChangeText={(value) => patchProfile({ username: value })}
         />
         <LabeledField
           label="真实姓名"
           value={profileDraft.realName}
-          onChangeText={(value) => setProfileDraft((current) => ({ ...current, realName: value }))}
+          onChangeText={(value) => patchProfile({ realName: value })}
         />
         <LabeledField
           label="邮箱"
           value={profileDraft.email}
-          onChangeText={(value) => setProfileDraft((current) => ({ ...current, email: value }))}
+          onChangeText={(value) => patchProfile({ email: value })}
         />
         <LabeledField
           label="学院"
           value={profileDraft.college}
-          onChangeText={(value) => setProfileDraft((current) => ({ ...current, college: value }))}
+          onChangeText={(value) => patchProfile({ college: value })}
         />
         <LabeledField
           label="专业"
           value={profileDraft.major}
-          onChangeText={(value) => setProfileDraft((current) => ({ ...current, major: value }))}
+          onChangeText={(value) => patchProfile({ major: value })}
         />
         <LabeledField
           label="班级"
           value={profileDraft.className}
-          onChangeText={(value) => setProfileDraft((current) => ({ ...current, className: value }))}
+          onChangeText={(value) => patchProfile({ className: value })}
         />
         <Pressable style={styles.primaryButton} onPress={() => updateProfileMutation.mutate()}>
           <Text style={styles.primaryText}>保存资料</Text>

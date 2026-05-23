@@ -15,12 +15,13 @@ import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/rea
 import { useNavigation } from '@react-navigation/native'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 
-import { api } from '../../api'
+import { api, extractErrorMessage } from '../../api'
 import { NoticeBanner } from '../../components/feedback/NoticeBanner'
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
 import { createDefaultAssignmentDates } from '../../demo-defaults'
 import type { AssignmentItem, CourseItem } from '../../domain'
+import { resetCourseStackTo } from '../../navigation/courseStackNav'
 import type { RoleTabParamList } from '../../navigation/RoleTabs'
 import {
   ASSIGNMENT_STATUS_OPTIONS,
@@ -53,7 +54,7 @@ function formatDateTimeBrief(value: string | null | undefined) {
 }
 
 export function TeacherAssignmentsScreen() {
-  const { session, apiBaseUrl, notice, notify } = useMobileAuth()
+  const { session, apiBaseUrl, notice, notify, dismissNotice } = useMobileAuth()
   const navigation = useNavigation<Nav>()
   const queryClient = useQueryClient()
 
@@ -132,13 +133,14 @@ export function TeacherAssignmentsScreen() {
       setPublishOpen(false)
       setDraft(DEFAULT_DRAFT())
       if (assignmentId && courseId) {
-        navigation.navigate('Courses', {
-          screen: 'AssignmentDetail',
-          params: { assignmentId, courseId },
-        })
+        resetCourseStackTo(navigation, [
+          { name: 'CourseList' },
+          { name: 'CourseWorkspace', params: { courseId } },
+          { name: 'AssignmentDetail', params: { assignmentId, courseId } },
+        ])
       }
     },
-    onError: (error) => notify(error instanceof Error ? error.message : '发布作业失败', 'error'),
+    onError: (error) => notify(extractErrorMessage(error), 'error'),
   })
 
   const selectedCourse = useMemo(
@@ -147,15 +149,19 @@ export function TeacherAssignmentsScreen() {
   )
 
   function openAssignment(row: Row) {
-    navigation.navigate('Courses', {
-      screen: 'AssignmentDetail',
-      params: { assignmentId: row.assignment.id, courseId: row.course.id },
-    })
+    resetCourseStackTo(navigation, [
+      { name: 'CourseList' },
+      { name: 'CourseWorkspace', params: { courseId: row.course.id } },
+      {
+        name: 'AssignmentDetail',
+        params: { assignmentId: row.assignment.id, courseId: row.course.id },
+      },
+    ])
   }
 
   return (
     <View style={styles.container}>
-      <NoticeBanner notice={notice} />
+      <NoticeBanner notice={notice} onDismiss={dismissNotice} />
       <View style={styles.card}>
         <View style={styles.titleRow}>
           <View style={styles.titleCopy}>

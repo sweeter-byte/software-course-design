@@ -219,10 +219,16 @@ async function createSessionTokens(reply: FastifyReply, context: AuthRouteContex
   role: string
   phone: string
 }) {
+  // Insert the session row first so we can stamp its id into the JWT. The
+  // session id is what requireAuth verifies on every request — if password
+  // change / phone change / account cancel later removes this row, the JWT
+  // immediately stops working on every other client.
+  const sessionId = nanoid()
   const accessToken = await reply.jwtSign({
     sub: user.id,
     role: user.role,
     phone: user.phone,
+    sid: sessionId,
   })
   const refreshToken = nanoid(32)
   const refreshTokenHash = await hashPassword(refreshToken)
@@ -237,7 +243,7 @@ async function createSessionTokens(reply: FastifyReply, context: AuthRouteContex
         ) VALUES (?, ?, ?, ?, ?, ?)
       `,
     )
-    .run(nanoid(), user.id, refreshTokenHash, expiresAt.toISOString(), now.toISOString(), now.toISOString())
+    .run(sessionId, user.id, refreshTokenHash, expiresAt.toISOString(), now.toISOString(), now.toISOString())
 
   return {
     accessToken,
@@ -248,6 +254,23 @@ async function createSessionTokens(reply: FastifyReply, context: AuthRouteContex
 export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteContext) {
   app.post('/verification-code', async (request, reply) => {
     const payload = verificationCodeRequestSchema.parse(request.body)
+
+    // Reset / change-phone(old) require a real active account on this phone.
+    // Register / change-phone(new) require the phone to NOT belong to anyone.
+    // Without these gates a user can burn verification quota / get codes for
+    // phones they do not own, and then hit confusing "未找到账号" later.
+    const phoneOwner = (await context.database
+      .prepare("SELECT id, status FROM users WHERE phone = ? LIMIT 1")
+      .get(payload.phone)) as { id: string; status: string } | undefined
+    const phoneActive = phoneOwner && phoneOwner.status === 'active'
+
+    if (payload.purpose === 'reset_password' && !phoneActive) {
+      throw new AppError('user_not_found', 404, 'USER_NOT_FOUND')
+    }
+    if (payload.purpose === 'register' && phoneActive) {
+      throw new AppError('phone_already_registered', 409, 'PHONE_ALREADY_REGISTERED')
+    }
+
     const now = new Date()
     const issued =
       context.config.verificationProvider === 'cloudbase'
@@ -507,7 +530,15 @@ export function registerAuthRoutes(app: FastifyInstance, context: AuthRouteConte
   app.post('/logout', async (request) => {
     const actor = await requireAuth(request)
 
-    await context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(actor.sub)
+    // Only kill the session bound to this JWT so logging out on one device
+    // does not boot the user off their other devices.
+    if (actor.sid) {
+      await context.database
+        .prepare('DELETE FROM auth_sessions WHERE id = ? AND user_id = ?')
+        .run(actor.sid, actor.sub)
+    } else {
+      await context.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(actor.sub)
+    }
 
     context.logger.info('user_logged_out', {
       requestId: request.id,

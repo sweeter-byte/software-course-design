@@ -7,6 +7,7 @@ import { api } from '../../api'
 import { RoleScreen } from '../../components/layout/RoleScreen'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
 import type { FeedbackItem } from '../../domain'
+import { resetCourseStackTo } from '../../navigation/courseStackNav'
 import {
   navigateRoleTab,
   type RoleTabParamList,
@@ -47,17 +48,26 @@ export function DashboardScreen() {
   const previewFeedbacks = queues.pendingFeedbacks.slice(0, 2)
 
   const openSubmissionTask = (task: PendingSubmissionTask) => {
-    navigation.navigate('Courses', {
-      screen: 'SubmissionDetail',
-      params: { submissionId: task.submission.id, courseId: task.courseId },
-    })
+    resetCourseStackTo(navigation, [
+      { name: 'CourseList' },
+      { name: 'CourseWorkspace', params: { courseId: task.courseId } },
+      {
+        name: 'SubmissionDetail',
+        params: { submissionId: task.submission.id, courseId: task.courseId },
+      },
+    ])
   }
 
   const openFeedbackTask = (thread: FeedbackItem) => {
-    navigation.navigate('Courses', {
-      screen: 'FeedbackThread',
-      params: { feedbackId: thread.id, courseId: thread.courseId ?? undefined },
-    })
+    const courseId = thread.courseId ?? undefined
+    resetCourseStackTo(navigation, [
+      { name: 'CourseList' },
+      ...(courseId ? [{ name: 'CourseWorkspace' as const, params: { courseId } }] : []),
+      {
+        name: 'FeedbackThread',
+        params: { feedbackId: thread.id, courseId },
+      },
+    ])
   }
 
   return (

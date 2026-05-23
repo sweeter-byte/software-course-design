@@ -1,6 +1,7 @@
 import type {
   AdminUserItem,
   AssignmentItem,
+  CourseEnrollmentItem,
   CourseFeedbackDimension,
   CourseFeedbackItem,
   CourseFilters,
@@ -53,25 +54,19 @@ export class ApiError extends Error {
   }
 }
 
-export function extractErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    const details = error.details
-      ?.map((detail) => {
-        const path = detail.path.length ? `${detail.path.join('.')}: ` : ''
-        return `${path}${detail.message}`
-      })
-      .join('；')
-    const code = error.code ? ` / ${error.code}` : ''
-    return details
-      ? `${error.message}${code} (${error.statusCode})：${details}`
-      : `${error.message}${code} (${error.statusCode})`
-  }
+// Mobile-friendly Chinese error funnel; mirrors web's utils/errors.ts so the
+// two clients show the same copy. Re-exported here to keep existing imports
+// (`import { extractErrorMessage } from '../../api'`) working unchanged.
+export { extractErrorMessage, friendlyErrorMessage } from './utils/errors'
 
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return '请求失败'
+// App.tsx registers a handler so a 401 from /users/me (because another
+// client wiped the session via password change / cancel-account) clears the
+// local session and bounces back to login.
+let sessionInvalidHandler: ((reason: string) => void) | null = null
+export function setSessionInvalidHandler(
+  handler: ((reason: string) => void) | null,
+) {
+  sessionInvalidHandler = handler
 }
 
 async function requestJson<T>(baseUrl: string, path: string, options: RequestOptions = {}): Promise<T> {
@@ -99,10 +94,14 @@ async function requestJson<T>(baseUrl: string, path: string, options: RequestOpt
         ) as ValidationIssue[])
       : undefined
 
-    throw new ApiError(payload.message ?? 'request_failed', response.status, {
-      code: typeof payload?.error?.code === 'string' ? payload.error.code : undefined,
-      details,
-    })
+    const message = payload.message ?? 'request_failed'
+    const code = typeof payload?.error?.code === 'string' ? payload.error.code : undefined
+
+    if (response.status === 401 && options.token && sessionInvalidHandler) {
+      sessionInvalidHandler(message)
+    }
+
+    throw new ApiError(message, response.status, { code, details })
   }
 
   return payload.data as T
@@ -311,7 +310,7 @@ export const api = {
       capacity: number
       startDate: string
       endDate: string
-      status: string
+      suspended: boolean
     }>,
   ) {
     return requestJson<{ course: CourseItem }>(baseUrl, `/courses/${courseId}`, {
@@ -331,6 +330,13 @@ export const api = {
       method: 'POST',
       token,
     })
+  },
+  listCourseEnrollments(baseUrl: string, token: string, courseId: string) {
+    return requestJson<{ items: CourseEnrollmentItem[] }>(
+      baseUrl,
+      `/courses/${courseId}/enrollments`,
+      { token },
+    )
   },
   listAssignments(baseUrl: string, token: string, courseId: string) {
     return requestJson<{ items: AssignmentItem[] }>(

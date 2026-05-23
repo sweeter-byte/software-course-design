@@ -76,15 +76,19 @@ function renderAppAt(path: string) {
 
 beforeEach(() => {
   window.localStorage.clear()
+  window.sessionStorage.clear()
 })
 
 afterEach(() => {
   window.localStorage.clear()
+  window.sessionStorage.clear()
 })
 
 describe('App routing', () => {
   it('renders the account section on /student/account', async () => {
-    window.localStorage.setItem('cms_session', JSON.stringify(studentSession))
+    // Session lives in sessionStorage now so multiple tabs in the same
+    // browser can hold different identities; see runtime-state.ts.
+    window.sessionStorage.setItem('cms_session', JSON.stringify(studentSession))
 
     renderAppAt('/student/account')
 
@@ -97,7 +101,7 @@ describe('App routing', () => {
   })
 
   it('redirects unknown teacher paths to the teacher dashboard', async () => {
-    window.localStorage.setItem('cms_session', JSON.stringify(teacherSession))
+    window.sessionStorage.setItem('cms_session', JSON.stringify(teacherSession))
 
     renderAppAt('/teacher/interaction')
 

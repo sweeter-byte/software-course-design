@@ -7,10 +7,17 @@ type AuthScaffoldProps = {
   title: string
   helper: string
   notice: NoticeState | null
+  onDismissNotice?: () => void
   children: ReactNode
 }
 
-export function AuthScaffold({ title, helper, notice, children }: AuthScaffoldProps) {
+export function AuthScaffold({
+  title,
+  helper,
+  notice,
+  onDismissNotice,
+  children,
+}: AuthScaffoldProps) {
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
       <View style={styles.hero}>
@@ -28,7 +35,7 @@ export function AuthScaffold({ title, helper, notice, children }: AuthScaffoldPr
         </Text>
       </View>
 
-      <NoticeBanner notice={notice} />
+      <NoticeBanner notice={notice} onDismiss={onDismissNotice} />
 
       <View style={styles.card}>
         <View style={styles.authHeader}>

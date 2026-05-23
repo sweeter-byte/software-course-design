@@ -14,7 +14,11 @@ export type CourseItem = {
   capacity: number
   startDate?: string | null
   endDate?: string | null
+  // status is derived on the server from start_date / end_date / today plus
+  // the suspended flag below. Officers only toggle suspended; the textual
+  // status is read-only on every client.
   status: string
+  suspended?: boolean
   enrolled?: boolean
 }
 
@@ -97,6 +101,19 @@ export type WorkspaceContext = {
   course: CourseItem | null
   assignment: AssignmentItem | null
   submission: SubmissionItem | null
+}
+
+export type CourseEnrollmentItem = {
+  studentId: string
+  realName: string
+  studentNo?: string | null
+  phone: string
+  email?: string | null
+  college?: string | null
+  major?: string | null
+  className?: string | null
+  enrolledAt: string
+  status: string
 }
 
 export type AdminUserItem = {

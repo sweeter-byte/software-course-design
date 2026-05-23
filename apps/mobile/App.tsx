@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { NavigationContainer } from '@react-navigation/native'
 
-import { api, type SessionPayload } from './src/api'
+import { api, setSessionInvalidHandler, type SessionPayload } from './src/api'
+import { ErrorBoundary } from './src/components/feedback/ErrorBoundary'
 import type { NoticeState, NoticeType } from './src/components/feedback/NoticeBanner'
 import { MobileAuthProvider } from './src/contexts/MobileAuthContext'
 import { AuthStack } from './src/navigation/AuthStack'
@@ -47,8 +48,41 @@ function Workspace() {
   const [isHydratingSession, setIsHydratingSession] = useState(true)
   const [loginPrefill, setLoginPrefill] = useState<{ phone: string; password: string } | null>(null)
 
+  // Auto-dismiss timer for the in-page NoticeBanner. Without this the banner
+  // stayed on screen forever (acceptance feedback: "弹窗一直不消失"). Error
+  // notices stay longer so the user actually has time to read the cause.
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const NOTICE_LIFETIME_MS: Record<NoticeType, number> = {
+    success: 3500,
+    info: 4000,
+    error: 6000,
+  }
+
+  const dismissNotice = useCallback(() => {
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current)
+      noticeTimerRef.current = null
+    }
+    setNoticeState(null)
+  }, [])
+
   const notify = useCallback((message: string, type: NoticeType = 'info') => {
+    if (noticeTimerRef.current) {
+      clearTimeout(noticeTimerRef.current)
+    }
     setNoticeState({ message, type })
+    noticeTimerRef.current = setTimeout(() => {
+      setNoticeState(null)
+      noticeTimerRef.current = null
+    }, NOTICE_LIFETIME_MS[type])
+  }, [])
+
+  // Clear the timer if the app unmounts (e.g. session reset) so we don't
+  // try to setState on an unmounted tree.
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current)
+    }
   }, [])
 
   const clearSession = useCallback(
@@ -69,6 +103,15 @@ function Workspace() {
     setSession(payload)
     void persistSession(secureSessionStorage, payload)
   }, [])
+
+  // Bounce back to login when the server rejects our token (e.g. another
+  // device just changed the password / cancelled the account).
+  useEffect(() => {
+    setSessionInvalidHandler((reason) => {
+      clearSession(reason === 'session_invalid' ? '登录已失效，请重新登录。' : '登录已失效，请重新登录。', 'info')
+    })
+    return () => setSessionInvalidHandler(null)
+  }, [clearSession])
 
   useEffect(() => {
     let mounted = true
@@ -122,6 +165,7 @@ function Workspace() {
                 apiBaseUrl={apiBaseUrl}
                 notice={notice}
                 notify={notify}
+                dismissNotice={dismissNotice}
                 onAuthenticated={handleAuthenticated}
                 prefill={loginPrefill}
               />
@@ -131,6 +175,7 @@ function Workspace() {
                 apiBaseUrl={apiBaseUrl}
                 notice={notice}
                 notify={notify}
+                dismissNotice={dismissNotice}
                 onRegistered={(phone, password) => setLoginPrefill({ phone, password })}
               />
             )}
@@ -139,6 +184,7 @@ function Workspace() {
                 apiBaseUrl={apiBaseUrl}
                 notice={notice}
                 notify={notify}
+                dismissNotice={dismissNotice}
                 onReset={(phone, newPassword) =>
                   setLoginPrefill({ phone, password: newPassword })
                 }
@@ -151,42 +197,89 @@ function Workspace() {
             apiBaseUrl={apiBaseUrl}
             notice={notice}
             notify={notify}
+            dismissNotice={dismissNotice}
             clearSession={clearSession}
             updateSessionUser={updateSessionUser}
           >
             <RoleTabs
               role={session.user.role}
               renderScreens={{
-                Dashboard: () => <DashboardScreen />,
-                Courses: () => (
-                  <CourseStack
-                    renderCourseList={() => <CourseListScreen />}
-                    renderCourseWorkspace={() => <CourseWorkspaceScreen />}
-                    renderCourseCreate={() => <CourseCreateScreen />}
-                    renderAssignmentDetail={() => <AssignmentDetailScreen />}
-                    renderSubmissionDetail={() => <SubmissionDetailScreen />}
-                    renderFeedbackThread={() => <FeedbackThreadScreen />}
-                  />
+                Dashboard: () => (
+                  <ErrorBoundary label="tab:dashboard">
+                    <DashboardScreen />
+                  </ErrorBoundary>
                 ),
-                Assignments: () => <AssignmentsTab role={session.user.role} />,
-                TeacherTasks: () => <TeacherTasksScreen />,
+                Courses: () => (
+                  <ErrorBoundary label="tab:courses">
+                    <CourseStack
+                      renderCourseList={() => (
+                        <ErrorBoundary label="screen:course-list">
+                          <CourseListScreen />
+                        </ErrorBoundary>
+                      )}
+                      renderCourseWorkspace={() => (
+                        <ErrorBoundary label="screen:course-workspace">
+                          <CourseWorkspaceScreen />
+                        </ErrorBoundary>
+                      )}
+                      renderCourseCreate={() => (
+                        <ErrorBoundary label="screen:course-create">
+                          <CourseCreateScreen />
+                        </ErrorBoundary>
+                      )}
+                      renderAssignmentDetail={() => (
+                        <ErrorBoundary label="screen:assignment-detail">
+                          <AssignmentDetailScreen />
+                        </ErrorBoundary>
+                      )}
+                      renderSubmissionDetail={() => (
+                        <ErrorBoundary label="screen:submission-detail">
+                          <SubmissionDetailScreen />
+                        </ErrorBoundary>
+                      )}
+                      renderFeedbackThread={() => (
+                        <ErrorBoundary label="screen:feedback-thread">
+                          <FeedbackThreadScreen />
+                        </ErrorBoundary>
+                      )}
+                    />
+                  </ErrorBoundary>
+                ),
+                Assignments: () => (
+                  <ErrorBoundary label="tab:assignments">
+                    <AssignmentsTab role={session.user.role} />
+                  </ErrorBoundary>
+                ),
+                TeacherTasks: () => (
+                  <ErrorBoundary label="tab:teacher-tasks">
+                    <TeacherTasksScreen />
+                  </ErrorBoundary>
+                ),
                 OfficerUsers: () => (
-                  <RoleScreen
-                    title="用户管理"
-                    subtitle="维护学生、教师、教务员账号，可禁用 / 恢复学生与教师。"
-                  >
-                    <OfficerUsersScreenBody />
-                  </RoleScreen>
+                  <ErrorBoundary label="tab:officer-users">
+                    <RoleScreen
+                      title="用户管理"
+                      subtitle="维护学生、教师、教务员账号，可禁用 / 恢复学生与教师。"
+                    >
+                      <OfficerUsersScreenBody />
+                    </RoleScreen>
+                  </ErrorBoundary>
                 ),
                 OfficerFeedbacks: () => (
-                  <RoleScreen
-                    title="课程反馈查看"
-                    subtitle="按维度查看全平台课程整体反馈，只读视图。"
-                  >
-                    <OfficerFeedbacksScreenBody />
-                  </RoleScreen>
+                  <ErrorBoundary label="tab:officer-feedbacks">
+                    <RoleScreen
+                      title="课程反馈查看"
+                      subtitle="按维度查看全平台课程整体反馈，只读视图。"
+                    >
+                      <OfficerFeedbacksScreenBody />
+                    </RoleScreen>
+                  </ErrorBoundary>
                 ),
-                Account: () => <AccountScreen onChangeApiBaseUrl={setApiBaseUrl} />,
+                Account: () => (
+                  <ErrorBoundary label="tab:account">
+                    <AccountScreen onChangeApiBaseUrl={setApiBaseUrl} />
+                  </ErrorBoundary>
+                ),
               }}
             />
           </MobileAuthProvider>
@@ -213,9 +306,11 @@ function AssignmentsTab({ role }: { role: SessionPayload['user']['role'] }) {
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <Workspace />
-    </QueryClientProvider>
+    <ErrorBoundary label="app:root">
+      <QueryClientProvider client={queryClient}>
+        <Workspace />
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }
 

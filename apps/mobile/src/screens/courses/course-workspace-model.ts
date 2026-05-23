@@ -7,6 +7,7 @@ export type CourseWorkspaceTabValue =
   | 'feedbacks'
   | 'course-feedbacks'
   | 'basic-info'
+  | 'enrollments'
 
 export type CourseWorkspaceTab = {
   value: CourseWorkspaceTabValue
@@ -22,6 +23,7 @@ const STUDENT_TABS: CourseWorkspaceTab[] = [
 
 const TEACHER_TABS: CourseWorkspaceTab[] = [
   { value: 'overview', label: '概览' },
+  { value: 'enrollments', label: '学生' },
   { value: 'assignments', label: '作业' },
   { value: 'submissions', label: '批改' },
   { value: 'feedbacks', label: '作业反馈' },
@@ -31,6 +33,7 @@ const TEACHER_TABS: CourseWorkspaceTab[] = [
 const OFFICER_TABS: CourseWorkspaceTab[] = [
   { value: 'overview', label: '概览' },
   { value: 'basic-info', label: '基础信息' },
+  { value: 'enrollments', label: '学生' },
   { value: 'assignments', label: '作业概况' },
   { value: 'course-feedbacks', label: '课程反馈' },
 ]

@@ -15,7 +15,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigation } from '@react-navigation/native'
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack'
 
-import { ApiError, api } from '../../api'
+import { ApiError, api, extractErrorMessage } from '../../api'
 import { NoticeBanner } from '../../components/feedback/NoticeBanner'
 import { SegmentedTabs } from '../../components/ui/SegmentedTabs'
 import { useMobileAuth } from '../../contexts/MobileAuthContext'
@@ -55,7 +55,7 @@ const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
 
 export function CourseListScreen() {
   const navigation = useNavigation<ListNavigation>()
-  const { session, apiBaseUrl, notice, notify } = useMobileAuth()
+  const { session, apiBaseUrl, notice, notify, dismissNotice } = useMobileAuth()
   const queryClient = useQueryClient()
   const role = session.user.role
 
@@ -103,7 +103,7 @@ export function CourseListScreen() {
         queryClient.invalidateQueries({ queryKey: ['mobile-course-list'] })
         return
       }
-      notify(error instanceof Error ? error.message : '加入课程失败', 'error')
+      notify(extractErrorMessage(error), 'error')
     },
   })
 
@@ -133,7 +133,7 @@ export function CourseListScreen() {
 
   return (
     <View style={styles.container}>
-      <NoticeBanner notice={notice} />
+      <NoticeBanner notice={notice} onDismiss={dismissNotice} />
       <View style={styles.card}>
         <View style={styles.titleRow}>
           <View style={styles.titleCopy}>
