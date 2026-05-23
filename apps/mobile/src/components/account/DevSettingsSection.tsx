@@ -3,6 +3,11 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 
 const PRESETS: ReadonlyArray<{ label: string; value: string; hint: string }> = [
   {
+    label: '生产环境',
+    value: 'https://rmywiki.cn/api/v1',
+    hint: '部署到 rmywiki.cn 的正式后端 (HTTPS)',
+  },
+  {
     label: '本机 Web',
     value: 'http://localhost:4100/api/v1',
     hint: 'Expo Web 或 iOS 模拟器直接访问本机服务',

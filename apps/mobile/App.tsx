@@ -37,7 +37,7 @@ import {
 } from './src/session'
 
 const queryClient = new QueryClient()
-const DEFAULT_API_BASE_URL = 'http://localhost:4100/api/v1'
+const DEFAULT_API_BASE_URL = 'https://rmywiki.cn/api/v1'
 
 function Workspace() {
   const queryClient = useQueryClient()
