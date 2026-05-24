@@ -57,32 +57,40 @@ export function StudentAssignmentsScreen() {
     [coursesQuery.data],
   )
 
+  // The query key ['mobile-course-assignments', ..., courseId] is shared with
+  // StudentCourseAssignmentsTab / AssignmentDetailScreen / overview tabs, which
+  // all cache the bare AssignmentItem[] array. We MUST return the same shape
+  // here, or React Query cache pollution makes whichever screen mounts second
+  // crash (object .find vs array.items mismatches). Course context is joined
+  // back via the enrolled[] index below instead of being baked into cache.
   const assignmentQueries = useQueries({
     queries: enrolled.map((course) => ({
       queryKey: ['mobile-course-assignments', apiBaseUrl, session.accessToken, course.id],
       queryFn: async () => {
         const payload = await api.listAssignments(apiBaseUrl, session.accessToken, course.id)
-        return { items: payload.items, course }
+        return payload.items
       },
     })),
   })
 
   const rows = useMemo<AssignmentRow[]>(() => {
     const merged: AssignmentRow[] = []
-    for (const query of assignmentQueries) {
-      if (!query.data) continue
-      for (const assignment of query.data.items) {
+    assignmentQueries.forEach((query, index) => {
+      if (!query.data) return
+      const course = enrolled[index]
+      if (!course) return
+      for (const assignment of query.data) {
         merged.push({
           assignment,
-          course: query.data.course,
+          course,
           submissionStatus: derivedSubmissionStatusForAssignment(assignment),
         })
       }
-    }
+    })
     return merged
       .filter((row) => (filter ? row.submissionStatus === filter : true))
       .sort((a, b) => (a.assignment.dueAt < b.assignment.dueAt ? 1 : -1))
-  }, [assignmentQueries, filter])
+  }, [assignmentQueries, enrolled, filter])
 
   const isLoading = coursesQuery.isLoading || assignmentQueries.some((query) => query.isLoading)
   const isRefreshing =

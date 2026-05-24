@@ -50,7 +50,7 @@ export async function seedDemoData(database: Database) {
     '13700137000',
     officerPassword,
     'office_orbit',
-    '教务管理员',
+    '王静怡',
     'officer@example.com',
     '女',
     null,

@@ -80,29 +80,37 @@ export function TeacherAssignmentsScreen() {
     [coursesQuery.data, session.user.id],
   )
 
+  // The query key ['mobile-course-assignments', ..., courseId] is shared with
+  // TeacherCourseAssignmentsTab / AssignmentDetailScreen / overview tabs, which
+  // all cache the bare AssignmentItem[] array. We MUST return the same shape
+  // here, or React Query cache pollution makes whichever screen mounts second
+  // crash (object .find vs array.items mismatches). Course context is joined
+  // back via the myCourses[] index below instead of being baked into cache.
   const assignmentQueries = useQueries({
     queries: myCourses.map((course) => ({
       queryKey: ['mobile-course-assignments', apiBaseUrl, session.accessToken, course.id],
       queryFn: async () => {
         const payload = await api.listAssignments(apiBaseUrl, session.accessToken, course.id)
-        return { items: payload.items, course }
+        return payload.items
       },
     })),
   })
 
   const rows = useMemo<Row[]>(() => {
     const merged: Row[] = []
-    for (const query of assignmentQueries) {
-      if (!query.data) continue
-      for (const assignment of query.data.items) {
-        merged.push({ assignment, course: query.data.course })
+    assignmentQueries.forEach((query, index) => {
+      if (!query.data) return
+      const course = myCourses[index]
+      if (!course) return
+      for (const assignment of query.data) {
+        merged.push({ assignment, course })
       }
-    }
+    })
     return merged
       .filter((row) => (courseFilter ? row.course.id === courseFilter : true))
       .filter((row) => (statusFilter ? deriveAssignmentStatus(row.assignment, nowMs) === statusFilter : true))
       .sort((a, b) => (a.assignment.dueAt < b.assignment.dueAt ? 1 : -1))
-  }, [assignmentQueries, courseFilter, statusFilter, nowMs])
+  }, [assignmentQueries, myCourses, courseFilter, statusFilter, nowMs])
 
   const isLoading = coursesQuery.isLoading || assignmentQueries.some((query) => query.isLoading)
   const isRefreshing =
