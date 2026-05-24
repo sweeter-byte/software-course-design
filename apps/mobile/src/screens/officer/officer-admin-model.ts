@@ -40,14 +40,14 @@ export const ADMIN_TABS: ReadonlyArray<AdminTabConfig> = [
     label: '教师',
     identityField: '工号',
     showStatusToggle: true,
-    description: '教师账号由系统管理员通过 seed 预置，不在此处创建。',
+    description: '教师账号由系统管理员预置，不在此处创建。',
   },
   {
     role: 'officer',
     label: '教务员',
     identityField: '账号',
     showStatusToggle: false,
-    description: '教务员账号由系统管理员通过 seed 预置，仅做只读查看。',
+    description: '教务员账号由系统管理员预置，仅做只读查看。',
   },
 ]
 

@@ -26,13 +26,10 @@ export function AuthScaffold({
             <Text style={styles.brandMarkText}>NUAA</Text>
           </View>
           <View style={styles.heroBrandCopy}>
-            <Text style={styles.eyebrow}>Course Pulse Mobile</Text>
-            <Text style={styles.heroTitle}>课程互动 · 移动工作台</Text>
+            <Text style={styles.eyebrow}>统一身份认证</Text>
+            <Text style={styles.heroTitle}>课程互动管理系统</Text>
           </View>
         </View>
-        <Text style={styles.heroCopy}>
-          不是网页压缩版，而是围绕当前角色任务栏组织移动端业务视图。
-        </Text>
       </View>
 
       <NoticeBanner notice={notice} onDismiss={onDismissNotice} />
@@ -80,7 +77,6 @@ const styles = StyleSheet.create({
   heroBrandCopy: { flex: 1, gap: 4 },
   eyebrow: { color: '#dbeafe', fontSize: 11, fontWeight: '800' },
   heroTitle: { color: '#ffffff', fontSize: 24, fontWeight: '800' },
-  heroCopy: { color: 'rgba(255, 255, 255, 0.78)', lineHeight: 22 },
   card: {
     borderRadius: 8,
     borderWidth: 1,

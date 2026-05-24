@@ -54,7 +54,7 @@ export function LoginScreen({
   return (
     <AuthScaffold
       title="账号登录"
-      helper="使用 Web 端同一账号体系，登录后按角色进入对应移动工作台。"
+      helper="请输入手机号与密码完成登录。"
       notice={notice}
       onDismissNotice={dismissNotice}
     >
@@ -76,9 +76,6 @@ export function LoginScreen({
           <Text style={styles.primaryText}>登录</Text>
         )}
       </Pressable>
-      <Text style={styles.helper}>
-        教师：13900139000 / Teacher123!，教务员：13700137000 / Officer123!
-      </Text>
       <View style={styles.authEntryRow}>
         <Pressable style={styles.linkButton} onPress={() => navigation.navigate('ResetPassword')}>
           <Text style={styles.linkButtonText}>忘记密码？</Text>

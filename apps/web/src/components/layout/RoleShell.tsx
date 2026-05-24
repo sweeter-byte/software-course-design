@@ -53,7 +53,7 @@ export function RoleShell(props: RoleShellProps) {
         </div>
       </div>
 
-      <nav className="sidebar-nav" aria-label="Web 端功能导航">
+      <nav className="sidebar-nav" aria-label="功能导航">
         {props.navItems.map((item) => {
           const isActive =
             location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)

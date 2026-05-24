@@ -497,7 +497,7 @@ function App() {
                   role="teacher"
                   showStatusToggle
                   identityFieldLabel="工号"
-                  description="教师账号由系统管理员在初始化阶段通过 seed 预置，不在此处创建。"
+                  description="教师账号由系统管理员预置，不在此处创建。"
                 />
               }
             />
@@ -508,7 +508,7 @@ function App() {
                   role="officer"
                   showStatusToggle={false}
                   identityFieldLabel="账号"
-                  description="教务员账号由系统管理员通过 seed 预置，仅做只读查看。"
+                  description="教务员账号由系统管理员预置，仅做只读查看。"
                 />
               }
             />
